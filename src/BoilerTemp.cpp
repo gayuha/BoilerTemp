@@ -15,8 +15,7 @@ int ledStatus = LOW;
 const char* const logFileName = LOGFILE;
 unsigned long lastMeasuredTime = millis() - TIME_BETWEEN_MEASUREMENTS; // write first measurement on startup
 
-const int oneWireBus = 2;
-OneWire oneWire(oneWireBus);
+OneWire oneWire(ONE_WIRE_BUS);
 DallasTemperature sensors(&oneWire);
 
 int dst = DST;
@@ -93,6 +92,18 @@ void toggleLED() {
     }
 }
 
+void printAddress(DeviceAddress deviceAddress) {
+    for (uint8_t i = 0; i < 8; i++) {
+        Serial.print("0x");
+        if (deviceAddress[i] < 0x10)
+            Serial.print("0");
+        Serial.print(deviceAddress[i], HEX);
+        if (i < 7)
+            Serial.print(", ");
+    }
+    Serial.println("");
+}
+
 void handleRequest(String request) {
     if (request.indexOf("/led=off") != -1) {
         toggleLED(false);
@@ -116,6 +127,28 @@ void handleRequest(String request) {
     }
     if (request.indexOf("/cleanhistory") != -1) {
         cleanHistory(logFileName);
+    }
+    if (request.indexOf("/getaddress") != -1) {
+        DeviceAddress Thermometer;
+
+        sensors.begin();
+        Serial.println("===");
+        Serial.println("Locating devices...");
+        Serial.print("Found ");
+        int deviceCount = sensors.getDeviceCount();
+        Serial.print(deviceCount, DEC);
+        Serial.println(" devices.");
+        Serial.println("");
+
+        Serial.println("Printing addresses...");
+        for (int i = 0; i < deviceCount; i++) {
+            Serial.print("Sensor ");
+            Serial.print(i + 1);
+            Serial.print(" : ");
+            sensors.getAddress(Thermometer, i);
+            printAddress(Thermometer);
+        }
+        Serial.println("===");
     }
 }
 
