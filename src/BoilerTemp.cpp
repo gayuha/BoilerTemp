@@ -22,18 +22,21 @@ int dst = DST;
 
 WiFiServer server(80);
 
+// Declarations
 void configureTime();
 bool connectSD();
 void logSD(String filename, String line);
 void rename(String from, String to);
 void cleanHistory(String filename);
-float getTemp(int sensorIndex);
+float getTemp(const int sensorIndex);
+float getTemp(const DeviceAddress sensorAddress);
 void toggleLED(bool on);
 void toggleLED();
 void handleRequest(String request);
 const String getTime();
 String readSD(String filename);
 
+// Functions
 void configureTime() { configTime(TIMEZONE * 3600, dst * 3600, "pool.ntp.org", "time.nist.gov"); }
 
 bool connectSD() { return (sdConnected = SD.begin(SS)); }
@@ -67,9 +70,13 @@ void cleanHistory(String filename) {
     rename(filename, newName);
 }
 
-float getTemp(int sensorIndex) {
+float getTemp(const int sensorIndex) {
     sensors.requestTemperatures();
     return (sensors.getTempCByIndex(sensorIndex));
+}
+float getTemp(const DeviceAddress sensorAddress) {
+    sensors.requestTemperatures();
+    return (sensors.getTempC(sensorAddress));
 }
 
 void toggleLED(bool on) {
@@ -210,9 +217,12 @@ void sendHTML(WiFiClient client) {
     client.print(dst == 1 ? "On" : "Off");
     client.println("<br />");
 
-    float temperatureC = getTemp(0);
-    client.print("Temperature: ");
-    client.print(temperatureC);
+    client.print("Temperature 1: ");
+    client.print(getTemp(sensor1Address));
+    client.println(" &deg;C<br />");
+
+    client.print("Temperature 2: ");
+    client.print(getTemp(sensor2Address));
     client.println(" &deg;C<br />");
 
     client.println("</p>");
