@@ -7,28 +7,150 @@
 #include <SPI.h>
 #include <time.h>
 
-const char* ssid = "IrishAP01";          // your WiFi Name
-const char* password = "0523423456ygif"; // Your Wifi Password
+#include "Configuration.h"
 
-#define LED_PIN 2
-#define TIME_BETWEEN_MEASUREMENTS 10 * 60 * 1000
-//#define REFRESH_RATE 60
+const char* ssid = SSID;
+const char* password = WIFI_PASSWORD;
 
 bool sdConnected = false;
-
 int ledStatus = LOW;
 
-const char* const logFileName = "temp.log";
+const char* const logFileName = LOGFILE;
 unsigned long lastMeasuredTime = millis() - TIME_BETWEEN_MEASUREMENTS; // write first measurement on startup
 
 const int oneWireBus = 2;
 OneWire oneWire(oneWireBus);
 DallasTemperature sensors(&oneWire);
 
-const int timezone = 2;
-int dst = 0;
+int dst = DST;
 
 WiFiServer server(80);
+
+void configureTime();
+bool connectSD();
+void logSD(String filename, String line);
+void rename(String from, String to);
+void cleanHistory(String filename);
+float getTemp(int sensorIndex);
+void toggleLED(bool on);
+void toggleLED();
+void handleRequest(String request);
+const String getTime();
+String readSD(String filename);
+
+void configureTime() { configTime(TIMEZONE * 3600, dst * 3600, "pool.ntp.org", "time.nist.gov"); }
+
+bool connectSD() { return (sdConnected = SD.begin(SS)); }
+
+void logSD(String filename, String line) {
+    File logFile;
+    logFile = SD.open(filename, FILE_WRITE);
+    if (!logFile) {
+        Serial.println("Failed to open file on SD for writing.");
+        sdConnected = false;
+        connectSD();
+        return;
+    }
+    logFile.println(line);
+    logFile.flush();
+    // Serial.println("Wrote to SD: ");
+    // Serial.println(line);
+}
+
+void rename(String from, String to) {
+    String data = readSD(from);
+    logSD(to, data);
+    SD.remove(from);
+}
+
+void cleanHistory(String filename) {
+    int i = 0;
+    String newName;
+    for (i = 0; SD.exists(newName = "backup_" + String(i) + ".log"); ++i)
+        ;
+    rename(filename, newName);
+}
+
+float getTemp(int sensorIndex) {
+    sensors.requestTemperatures();
+    return (sensors.getTempCByIndex(sensorIndex));
+}
+
+void toggleLED(bool on) {
+    if (on) {
+        digitalWrite(LED_PIN, LOW);
+        ledStatus = LOW;
+    } else {
+        digitalWrite(LED_PIN, HIGH);
+        ledStatus = HIGH;
+    }
+}
+
+void toggleLED() {
+    if (ledStatus == HIGH) {
+        digitalWrite(LED_PIN, LOW);
+        ledStatus = LOW;
+    } else {
+        digitalWrite(LED_PIN, HIGH);
+        ledStatus = HIGH;
+    }
+}
+
+void handleRequest(String request) {
+    if (request.indexOf("/led=off") != -1) {
+        toggleLED(false);
+    }
+    if (request.indexOf("/led=on") != -1) {
+        toggleLED(true);
+    }
+    if (request.indexOf("/led") != -1) {
+        toggleLED();
+    }
+    if (request.indexOf("/sd") != -1) {
+        connectSD();
+    }
+    if (request.indexOf("/dst=off") != -1) {
+        dst = 0;
+        configureTime();
+    }
+    if (request.indexOf("/dst=on") != -1) {
+        dst = 1;
+        configureTime();
+    }
+    if (request.indexOf("/cleanhistory") != -1) {
+        cleanHistory(logFileName);
+    }
+}
+
+const String getTime() {
+    const time_t now = time(nullptr);
+
+    char* charNow = (char*)malloc(50);
+    strftime(charNow, 50, "%d.%m.%Y, %A, %H:%M", localtime(&now));
+    String strNow = String(charNow);
+    free(charNow);
+
+    return (strNow);
+}
+
+String readSD(String filename) {
+    File logFile;
+    String out = "";
+    logFile = SD.open(filename, FILE_READ);
+    if (!logFile) {
+        Serial.println("Failed to open file on SD for reading.");
+        sdConnected = false;
+        connectSD();
+        return "";
+    }
+    while (logFile.available() != 0) {
+        String LineString = logFile.readStringUntil('\n');
+        LineString.concat("\n" + out);
+        out = LineString;
+    }
+    return out;
+}
+
 void setup() {
     Serial.begin(115200);
     delay(10);
@@ -43,9 +165,9 @@ void setup() {
         delay(500);
         Serial.print(".");
     }
-    IPAddress ip(10, 100, 102, 50);
-    IPAddress gateway(10, 100, 102, 1);
-    IPAddress subnet(255, 255, 255, 0);
+    IPAddress ip(IP);
+    IPAddress gateway(GATEWAY);
+    IPAddress subnet(SUBNET);
     WiFi.config(ip, gateway, subnet);
 
     Serial.println("");
@@ -162,117 +284,4 @@ void loop() {
     delay(10);
     Serial.println("Client disonnected");
     Serial.println("");
-}
-
-void logSD(String filename, String line) {
-    File logFile;
-    logFile = SD.open(filename, FILE_WRITE);
-    if (!logFile) {
-        Serial.println("Failed to open file on SD for writing.");
-        sdConnected = false;
-        connectSD();
-        return;
-    }
-    logFile.println(line);
-    logFile.flush();
-    // Serial.println("Wrote to SD: ");
-    // Serial.println(line);
-}
-
-float getTemp(int sensorIndex) {
-    sensors.requestTemperatures();
-    return (sensors.getTempCByIndex(sensorIndex));
-}
-
-void toggleLED(bool on) {
-    if (on) {
-        digitalWrite(LED_PIN, LOW);
-        ledStatus = LOW;
-    } else {
-        digitalWrite(LED_PIN, HIGH);
-        ledStatus = HIGH;
-    }
-}
-
-void toggleLED() {
-    if (ledStatus == HIGH) {
-        digitalWrite(LED_PIN, LOW);
-        ledStatus = LOW;
-    } else {
-        digitalWrite(LED_PIN, HIGH);
-        ledStatus = HIGH;
-    }
-}
-
-bool connectSD() { return (sdConnected = SD.begin(SS)); }
-
-void handleRequest(String request) {
-    if (request.indexOf("/led=off") != -1) {
-        toggleLED(false);
-    }
-    if (request.indexOf("/led=on") != -1) {
-        toggleLED(true);
-    }
-    if (request.indexOf("/led") != -1) {
-        toggleLED();
-    }
-    if (request.indexOf("/sd") != -1) {
-        connectSD();
-    }
-    if (request.indexOf("/dst=off") != -1) {
-        dst = 0;
-        configureTime();
-    }
-    if (request.indexOf("/dst=on") != -1) {
-        dst = 1;
-        configureTime();
-    }
-    if (request.indexOf("/cleanhistory") != -1) {
-        cleanHistory(logFileName);
-    }
-}
-
-const String getTime() {
-    const time_t now = time(nullptr);
-
-    char* charNow = (char*)malloc(50);
-    strftime(charNow, 50, "%d.%m.%Y, %A, %H:%M", localtime(&now));
-    String strNow = String(charNow);
-    free(charNow);
-
-    return (strNow);
-}
-
-void configureTime() { configTime(timezone * 3600, dst * 3600, "pool.ntp.org", "time.nist.gov"); }
-
-String readSD(String filename) {
-    File logFile;
-    String out = "";
-    logFile = SD.open(filename, FILE_READ);
-    if (!logFile) {
-        Serial.println("Failed to open file on SD for reading.");
-        sdConnected = false;
-        connectSD();
-        return "";
-    }
-    while (logFile.available() != 0) {
-        String LineString = logFile.readStringUntil('\n');
-        LineString.concat("\n" + out);
-        out = LineString;
-    }
-    return out;
-}
-
-void cleanHistory(String filename) {
-    int i = 0;
-    String newName;
-    for (i = 0; SD.exists(newName = "backup_" + String(i) + ".log"); ++i)
-        ;
-    rename(filename, newName);
-}
-
-void rename(String from, String to) {
-    String data = readSD(from);
-    logSD(to, data);
-    SD.remove(from);
 }
