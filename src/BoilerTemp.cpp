@@ -1,4 +1,5 @@
 #include <Arduino.h>
+#include <ArduinoOTA.h>
 
 #include <DallasTemperature.h>
 
@@ -35,6 +36,7 @@ void toggleLED();
 void handleRequest(String request);
 const String getTime();
 String readSD(String filename);
+void setupOTA();
 
 // Functions
 void configureTime() { configTime(TIMEZONE * 3600, dst * 3600, "pool.ntp.org", "time.nist.gov"); }
@@ -237,9 +239,46 @@ void sendHTML(WiFiClient client) {
     client.println("</html>");
 }
 
+void setupOTA() {
+    ArduinoOTA.setPort(3232);
+    ArduinoOTA.onStart([]() {
+        String type;
+        if (ArduinoOTA.getCommand() == U_FLASH)
+            type = "sketch";
+        else // U_SPIFFS
+            type = "filesystem";
+
+        // NOTE: if updating SPIFFS this would be the place to unmount SPIFFS using SPIFFS.end()
+        Serial.println("Start updating " + type);
+    });
+
+    ArduinoOTA.onEnd([]() { Serial.println("\nEnd"); });
+
+    ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
+        Serial.printf("Progress: %u%%\r", (progress / (total / 100)));
+    });
+
+    ArduinoOTA.onError([](ota_error_t error) {
+        Serial.printf("Error[%u]: ", error);
+        if (error == OTA_AUTH_ERROR)
+            Serial.println("Auth Failed");
+        else if (error == OTA_BEGIN_ERROR)
+            Serial.println("Begin Failed");
+        else if (error == OTA_CONNECT_ERROR)
+            Serial.println("Connect Failed");
+        else if (error == OTA_RECEIVE_ERROR)
+            Serial.println("Receive Failed");
+        else if (error == OTA_END_ERROR)
+            Serial.println("End Failed");
+    });
+
+    ArduinoOTA.begin();
+}
+
 void setup() {
     Serial.begin(115200);
     delay(10);
+
     pinMode(LED_PIN, OUTPUT);
     digitalWrite(LED_PIN, LOW);
     Serial.println();
@@ -251,36 +290,25 @@ void setup() {
         delay(500);
         Serial.print(".");
     }
-    IPAddress ip(IP);
-    IPAddress gateway(GATEWAY);
-    IPAddress subnet(SUBNET);
-    WiFi.config(ip, gateway, subnet);
+    WiFi.config(IPAddress(IP), IPAddress (GATEWAY), IPAddress (SUBNET));
+
+    Serial.println("Setting up OTA...");
+    setupOTA();
+    Serial.println("OTA setup end.");
 
     Serial.println("");
-    Serial.println("WiFi connected");
+    Serial.println("WiFi connected.");
 
     server.begin();
-    Serial.println("Server started");
+    Serial.println("Server started.");
 
-    Serial.print("Use this URL to connect: ");
-    Serial.print("http://");
-    Serial.print(WiFi.localIP());
-    Serial.println("/");
-
-    Serial.println();
-    Serial.println("Initializing SD card...");
     pinMode(SS, OUTPUT);
-    if (!connectSD()) {
-        Serial.println("SD did not initiliaze");
-    } else {
-        Serial.println("SD initialized.");
-    }
 
     sensors.begin();
 
     configureTime();
-    delay(1000);
-    Serial.print("\nWaiting for time");
+    delay(500);
+    Serial.print("\nWaiting for time...");
     while (!time(nullptr)) {
         Serial.print(".");
         delay(500);
@@ -295,10 +323,11 @@ void setup() {
         delay(100);
     }
 
-    Serial.println("\nSetup Finished!\n\n");
+    Serial.println("\n~~~ Setup Finished! ~~~\n\n");
 }
 
 void loop() {
+    ArduinoOTA.handle();
     if (millis() - lastMeasuredTime >= TIME_BETWEEN_MEASUREMENTS) {
         float temperatureC = getTemp(0);
         logSD(logFileName, getTime() + String(" => ") + String(temperatureC) + String(" &deg;C"));
@@ -326,6 +355,6 @@ void loop() {
     sendHTML(client);
 
     delay(10);
-    Serial.println("Client disonnectedd");
+    Serial.println("Client disonnected");
     Serial.println("");
 }
