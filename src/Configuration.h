@@ -1,8 +1,8 @@
-#define SSID "IrishAP01"
+#define SSID "Irisha"
 #define WIFI_PASSWORD "0523423456ygif"
 
 #define LED_PIN 2
-#define TIME_BETWEEN_MEASUREMENTS 10 * 60 * 1000 // in milliseconds
+#define TIME_BETWEEN_MEASUREMENTS 5 * 60 * 1000 // in milliseconds
 
 #define LOGFILE "temp.log"
 

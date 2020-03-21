@@ -9,9 +9,6 @@
 
 #include "Configuration.h"
 
-const char* ssid = SSID;
-const char* password = WIFI_PASSWORD;
-
 bool sdConnected = false;
 int ledStatus = LOW;
 
@@ -151,6 +148,52 @@ String readSD(String filename) {
     return out;
 }
 
+void sendHTML(WiFiClient client) {
+    client.println("HTTP/1.1 200 OK");
+    client.println("Content-Type: text/html");
+    client.println("");
+    client.println("<html>");
+    client.println("<head>");
+    client.println("<meta http-equiv=\"refresh\" content=\"60\" >");
+    client.println("</head>");
+    client.println("<body>");
+    client.println("<p>");
+    client.print("IP: ");
+    client.println(WiFi.localIP());
+    client.println("<br />");
+    client.print("SD Connected: ");
+    client.print(sdConnected ? "True" : "False");
+    client.println("<br />");
+
+    client.print("Led is: ");
+    client.print(ledStatus == HIGH ? "Off" : "On");
+    client.println("<br />");
+
+    client.print("Time: ");
+    client.print(getTime());
+    client.println("<br />");
+
+    client.print("DST: ");
+    client.print(dst == 1 ? "On" : "Off");
+    client.println("<br />");
+
+    float temperatureC = getTemp(0);
+    client.print("Temperature: ");
+    client.print(temperatureC);
+    client.println(" &deg;C<br />");
+
+    client.println("</p>");
+
+    client.println("<p><br /><br />");
+    String history = readSD(logFileName);
+    history.replace("\n", "<br />");
+    client.println(history);
+    client.println("</p>");
+
+    client.println("</body>");
+    client.println("</html>");
+}
+
 void setup() {
     Serial.begin(115200);
     delay(10);
@@ -159,8 +202,8 @@ void setup() {
     Serial.println();
     Serial.println();
     Serial.print("Connecting to ");
-    Serial.print(ssid);
-    WiFi.begin(ssid, password);
+    Serial.print(SSID);
+    WiFi.begin(SSID, WIFI_PASSWORD);
     while (WiFi.status() != WL_CONNECTED) {
         delay(500);
         Serial.print(".");
@@ -237,51 +280,9 @@ void loop() {
     client.flush();
 
     handleRequest(request);
+    sendHTML(client);
 
-    client.println("HTTP/1.1 200 OK");
-    client.println("Content-Type: text/html");
-    client.println("");
-    client.println("<html>");
-    client.println("<head>");
-    client.println("<meta http-equiv=\"refresh\" content=\"60\" >");
-    client.println("</head>");
-    client.println("<body>");
-    client.println("<p>");
-    client.print("IP: ");
-    client.println(WiFi.localIP());
-    client.println("<br />");
-    client.print("SD Connected: ");
-    client.print(sdConnected ? "True" : "False");
-    client.println("<br />");
-
-    client.print("Led is: ");
-    client.print(ledStatus == HIGH ? "Off" : "On");
-    client.println("<br />");
-
-    client.print("Time: ");
-    client.print(getTime());
-    client.println("<br />");
-
-    client.print("DST: ");
-    client.print(dst == 1 ? "On" : "Off");
-    client.println("<br />");
-
-    float temperatureC = getTemp(0);
-    client.print("Temperature: ");
-    client.print(temperatureC);
-    client.println(" &deg;C<br />");
-
-    client.println("</p>");
-
-    client.println("<p><br /><br />");
-    String history = readSD(logFileName);
-    history.replace("\n", "<br />");
-    client.println(history);
-    client.println("</p>");
-
-    client.println("</body>");
-    client.println("</html>");
     delay(10);
-    Serial.println("Client disonnected");
+    Serial.println("Client disonnectedd");
     Serial.println("");
 }
