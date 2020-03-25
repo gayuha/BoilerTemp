@@ -279,6 +279,8 @@ void setup() {
     Serial.begin(115200);
     delay(10);
 
+    Serial.println("\n~~~ Setup Begin! ~~~\n\n");
+
     pinMode(LED_PIN, OUTPUT);
     digitalWrite(LED_PIN, LOW);
     Serial.println();
@@ -286,11 +288,18 @@ void setup() {
     Serial.print("Connecting to ");
     Serial.print(SSID);
     WiFi.begin(SSID, WIFI_PASSWORD);
-    while (WiFi.status() != WL_CONNECTED) {
-        delay(500);
-        Serial.print(".");
+    while (WiFi.waitForConnectResult() != WL_CONNECTED) {
+        Serial.println("Failed to connect!");
+        Serial.print("Connecting to ");
+        Serial.print(SSID2);
+        WiFi.begin(SSID2, WIFI_PASSWORD2);
+        while (WiFi.waitForConnectResult() != WL_CONNECTED) {
+            Serial.println("Failed to connect!");
+            delay(500);
+            ESP.restart();
+        }
     }
-    WiFi.config(IPAddress(IP), IPAddress (GATEWAY), IPAddress (SUBNET));
+    WiFi.config(IPAddress(IP), IPAddress(GATEWAY), IPAddress(SUBNET));
 
     Serial.println("Setting up OTA...");
     setupOTA();
@@ -320,7 +329,7 @@ void setup() {
         toggleLED(false);
         delay(300);
         toggleLED(true);
-        delay(100);
+        delay(300);
     }
 
     Serial.println("\n~~~ Setup Finished! ~~~\n\n");
@@ -329,8 +338,8 @@ void setup() {
 void loop() {
     ArduinoOTA.handle();
     if (millis() - lastMeasuredTime >= TIME_BETWEEN_MEASUREMENTS) {
-        float temperatureC = getTemp(0);
-        logSD(logFileName, getTime() + String(" => ") + String(temperatureC) + String(" &deg;C"));
+        logSD(logFileName, getTime() + String(" => ") + String(getTemp(sensor1Address)) + String(" &deg;C") + ", " +
+                               String(getTemp(sensor2Address)) + String(" &deg;C"));
         lastMeasuredTime = millis();
     }
 

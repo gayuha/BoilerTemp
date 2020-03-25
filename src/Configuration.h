@@ -1,5 +1,7 @@
-#define SSID "Irisha"
+#define SSID "IrishAP01"
 #define WIFI_PASSWORD "0523423456ygif"
+#define SSID2 "Irisha"
+#define WIFI_PASSWORD2 "0523423456ygif"
 
 #define ONE_WIRE_BUS 2
 const DeviceAddress sensor1Address = {0x28, 0x23, 0xD0, 0x77, 0x91, 0x09, 0x02, 0x0C};
