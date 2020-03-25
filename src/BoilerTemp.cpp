@@ -116,26 +116,33 @@ void printAddress(DeviceAddress deviceAddress) {
 void handleRequest(String request) {
     if (request.indexOf("/led=off") != -1) {
         toggleLED(false);
+        return;
     }
     if (request.indexOf("/led=on") != -1) {
         toggleLED(true);
+        return;
     }
     if (request.indexOf("/led") != -1) {
         toggleLED();
+        return;
     }
     if (request.indexOf("/sd") != -1) {
         connectSD();
+        return;
     }
     if (request.indexOf("/dst=off") != -1) {
         dst = 0;
         configureTime();
+        return;
     }
     if (request.indexOf("/dst=on") != -1) {
         dst = 1;
         configureTime();
+        return;
     }
     if (request.indexOf("/cleanhistory") != -1) {
         cleanHistory(logFileName);
+        return;
     }
     if (request.indexOf("/getaddress") != -1) {
         DeviceAddress Thermometer;
@@ -158,6 +165,7 @@ void handleRequest(String request) {
             printAddress(Thermometer);
         }
         Serial.println("===");
+        return;
     }
 }
 
@@ -219,13 +227,30 @@ void sendHTML(WiFiClient client) {
     client.print(dst == 1 ? "On" : "Off");
     client.println("<br />");
 
+    float temp1 = getTemp(sensor1Address);
     client.print("Temperature 1: ");
-    client.print(getTemp(sensor1Address));
+    client.print(temp1);
     client.println(" &deg;C<br />");
 
+    float temp2 = getTemp(sensor2Address);
     client.print("Temperature 2: ");
-    client.print(getTemp(sensor2Address));
+    client.print(temp2);
     client.println(" &deg;C<br />");
+
+    client.print("Temp1 - Temp2 = " + String(temp1 - temp2) + " &deg;C<br />");
+
+    client.println("</p>");
+
+    client.println("<p>");
+    client.println("Available commands:<br />");
+    client.println("/led<br />");
+    client.println("/led=on<br />");
+    client.println("/led=off<br />");
+    client.println("/sd<br />");
+    client.println("/dst=on<br />");
+    client.println("/dst=off<br />");
+    client.println("/cleanhistory<br />");
+    client.println("/getaddress<br />");
 
     client.println("</p>");
 
@@ -338,8 +363,10 @@ void setup() {
 void loop() {
     ArduinoOTA.handle();
     if (millis() - lastMeasuredTime >= TIME_BETWEEN_MEASUREMENTS) {
-        logSD(logFileName, getTime() + String(" => ") + String(getTemp(sensor1Address)) + String(" &deg;C") + ", " +
-                               String(getTemp(sensor2Address)) + String(" &deg;C"));
+        float temp1 = getTemp(sensor1Address);
+        float temp2 = getTemp(sensor2Address);
+        logSD(logFileName, getTime() + String(" => ") + String(temp1) + String(" &deg;C") + ", " + String(temp2) +
+                               String(" &deg;C") + ", " + String(temp1 - temp2) + String(" &deg;C"));
         lastMeasuredTime = millis();
     }
 
