@@ -9,6 +9,7 @@
 #include <time.h>
 
 #include "Configuration.h"
+#include "index.h"
 
 bool sdConnected = false;
 int ledStatus = LOW;
@@ -202,66 +203,26 @@ void sendHTML(WiFiClient client) {
     client.println("HTTP/1.1 200 OK");
     client.println("Content-Type: text/html");
     client.println("");
-    client.println("<html>");
-    client.println("<head>");
-    client.println("<meta http-equiv=\"refresh\" content=\"60\" >");
-    client.println("</head>");
-    client.println("<body>");
-    client.println("<p>");
-    client.print("IP: ");
-    client.println(WiFi.localIP());
-    client.println("<br />");
-    client.print("SD Connected: ");
-    client.print(sdConnected ? "True" : "False");
-    client.println("<br />");
-
-    client.print("Led is: ");
-    client.print(ledStatus == HIGH ? "Off" : "On");
-    client.println("<br />");
-
-    client.print("Time: ");
-    client.print(getTime());
-    client.println("<br />");
-
-    client.print("DST: ");
-    client.print(dst == 1 ? "On" : "Off");
-    client.println("<br />");
 
     float temp1 = getTemp(sensor1Address);
-    client.print("Temperature 1: ");
-    client.print(temp1);
-    client.println(" &deg;C<br />");
-
     float temp2 = getTemp(sensor2Address);
-    client.print("Temperature 2: ");
-    client.print(temp2);
-    client.println(" &deg;C<br />");
 
-    client.print("Temp1 - Temp2 = " + String(temp1 - temp2) + " &deg;C<br />");
-
-    client.println("</p>");
-
-    client.println("<p>");
-    client.println("Available commands:<br />");
-    client.println("/led<br />");
-    client.println("/led=on<br />");
-    client.println("/led=off<br />");
-    client.println("/sd<br />");
-    client.println("/dst=on<br />");
-    client.println("/dst=off<br />");
-    client.println("/cleanhistory<br />");
-    client.println("/getaddress<br />");
-
-    client.println("</p>");
-
-    client.println("<p><br /><br />");
     String history = readSD(logFileName);
-    history.replace("\n", "<br />");
-    client.println(history);
-    client.println("</p>");
+    history.replace("\n", "<br />\n");
 
-    client.println("</body>");
-    client.println("</html>");
+    String html = String(index_html);
+    html.replace("_HEAD_", R"===(<meta http-equiv="refresh" content="60" >)===");
+    html.replace("_IP_", WiFi.localIP().toString());
+    html.replace("_SD-STATUS_", sdConnected ? "True" : "False");
+    html.replace("_LED-STATUS_", ledStatus == HIGH ? "Off" : "On");
+    html.replace("_TIME_", getTime());
+    html.replace("_DST_", dst == 1 ? "On" : "Off");
+    html.replace("_TEMP1_", String(temp1));
+    html.replace("_TEMP2_", String(temp2));
+    html.replace("_TEMP-DIFF_", String(temp1 - temp2));
+    html.replace("_HISTORY_", history);
+
+    client.println(html);
 }
 
 void setupOTA() {
