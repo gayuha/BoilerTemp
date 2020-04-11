@@ -8,6 +8,8 @@
 #include <SPI.h>
 #include <time.h>
 
+#include <sstream>
+
 #include "Configuration.h"
 #include "index.h"
 
@@ -74,12 +76,20 @@ void cleanHistory(String filename) {
 }
 
 float getTemp(const int sensorIndex) {
+    float temp = -100;
     sensors.requestTemperatures();
-    return (sensors.getTempCByIndex(sensorIndex));
+    while ((temp = sensors.getTempCByIndex(sensorIndex)) < -50) {
+        delay(100);
+    }
+    return (temp);
 }
 float getTemp(const DeviceAddress sensorAddress) {
+    float temp = -100;
     sensors.requestTemperatures();
-    return (sensors.getTempC(sensorAddress));
+    while ((temp = sensors.getTempC(sensorAddress)) < -50) {
+        delay(100);
+    }
+    return (temp);
 }
 
 void toggleLED(bool on) {
@@ -181,6 +191,8 @@ const String getTime() {
     return (strNow);
 }
 
+time_t getTimeRaw() { return time(nullptr) - (TIMEZONE + DST) * 3600; }
+
 String readSD(String filename) {
     File logFile;
     String out = "";
@@ -199,6 +211,69 @@ String readSD(String filename) {
     return out;
 }
 
+String parseHot(String line) {
+    int i1 = 0, i2 = 0;
+    for (i1 = 0; line.charAt(i1) != ' ' && i1 < 50; i1++) {
+    }
+    String time = line.substring(0, i1);
+
+    for (i2 = i1 + 1; line.charAt(i2) != ' ' && i2 < 50; i2++) {
+    }
+    String tempHot = line.substring(i1 + 1, i2);
+
+    String point = "{";
+    point += "x: " + time + "000, ";
+    point += "y: " + tempHot;
+    point += "}";
+    return point;
+}
+
+String parseCold(String line) {
+    int i1 = 0, i2 = 0, i3 = 0;
+    for (i1 = 0; line.charAt(i1) != ' ' && i1 < 50; i1++) {
+    }
+    String time = line.substring(0, i1);
+
+    for (i2 = i1 + 1; line.charAt(i2) != ' ' && i2 < 50; i2++) {
+    }
+    for (i3 = i2 + 1; line.charAt(i3) != ' ' && i3 < 50; i3++) {
+    }
+    String tempCold = line.substring(i2 + 1, i3);
+
+    String point = "{";
+    point += "x: " + time + "000, ";
+    point += "y: " + tempCold;
+    point += "}";
+    return point;
+}
+
+String* parseTemps(String line) {
+    int i1 = 0, i2 = 0, i3 = 0;
+    for (i1 = 0; line.charAt(i1) != ' ' && i1 < 50; i1++) {
+    }
+    String time = line.substring(0, i1);
+
+    for (i2 = i1 + 1; line.charAt(i2) != ' ' && i2 < 50; i2++) {
+    }
+    String tempHot = line.substring(i1 + 1, i2);
+    for (i3 = i2 + 1; line.charAt(i3) != ' ' && i3 < 50; i3++) {
+    }
+    String tempCold = line.substring(i2 + 1, i3);
+
+    String pointHot = "{";
+    pointHot += "x: " + time + "000, ";
+    pointHot += "y: " + tempHot;
+    pointHot += "}";
+
+    String pointCold = "{";
+    pointCold += "x: " + time + "000, ";
+    pointCold += "y: " + tempCold;
+    pointCold += "}";
+
+    String points[2] = {pointHot, pointCold};
+    return points;
+}
+
 void sendHTML(WiFiClient client) {
     client.println("HTTP/1.1 200 OK");
     client.println("Content-Type: text/html");
@@ -207,11 +282,22 @@ void sendHTML(WiFiClient client) {
     float temp1 = getTemp(sensor1Address);
     float temp2 = getTemp(sensor2Address);
 
+    String hotData = "";
+    String coldData = "";
+
     String history = readSD(logFileName);
-    history.replace("\n", "<br />\n");
+    // history.replace("\n", "<br />\n");
+    std::istringstream stream(history.c_str());
+    std::string line;
+    while (std::getline(stream, line)) {
+        String* points = parseTemps(String(line.c_str()));
+        hotData += points[0] + ",";
+        coldData += points[1] + ",";
+    }
+    hotData.remove(hotData.length() - 1, 1);
 
     String html = String(index_html);
-    html.replace("_HEAD_", R"===(<meta http-equiv="refresh" content="60" >)===");
+    html.replace("_HEAD_", R"===(<meta http-equiv="refresh" content="120" >)===");
     html.replace("_IP_", WiFi.localIP().toString());
     html.replace("_SD-STATUS_", sdConnected ? "True" : "False");
     html.replace("_LED-STATUS_", ledStatus == HIGH ? "Off" : "On");
@@ -220,7 +306,12 @@ void sendHTML(WiFiClient client) {
     html.replace("_TEMP1_", String(temp1));
     html.replace("_TEMP2_", String(temp2));
     html.replace("_TEMP-DIFF_", String(temp1 - temp2));
-    html.replace("_HISTORY_", history);
+    html.replace("_HISTORY_", "");
+    html.replace("_HOTDATA_", hotData);
+    html.replace("_COLDDATA_", coldData);
+
+    html.replace("_LASTHOT_", String(temp1));
+    html.replace("_LASTCOLD_", String(temp2));
 
     client.println(html);
 }
@@ -326,8 +417,8 @@ void loop() {
     if (millis() - lastMeasuredTime >= TIME_BETWEEN_MEASUREMENTS) {
         float temp1 = getTemp(sensor1Address);
         float temp2 = getTemp(sensor2Address);
-        logSD(logFileName, getTime() + String(" => ") + String(temp1) + String(" &deg;C") + ", " + String(temp2) +
-                               String(" &deg;C") + ", " + String(temp1 - temp2) + String(" &deg;C"));
+        logSD(logFileName,
+              String(getTimeRaw()) + " " + String(temp1) + " " + String(temp2) + " " + String(temp1 - temp2));
         lastMeasuredTime = millis();
     }
 
