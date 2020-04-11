@@ -77,18 +77,20 @@ void cleanHistory(String filename) {
 
 float getTemp(const int sensorIndex) {
     float temp = -100;
-    sensors.requestTemperatures();
-    while ((temp = sensors.getTempCByIndex(sensorIndex)) < -50) {
+    do {
+        sensors.requestTemperatures();
+        temp = sensors.getTempCByIndex(sensorIndex);
         delay(100);
-    }
+    } while (temp < -50);
     return (temp);
 }
 float getTemp(const DeviceAddress sensorAddress) {
     float temp = -100;
-    sensors.requestTemperatures();
-    while ((temp = sensors.getTempC(sensorAddress)) < -50) {
+    do {
+        sensors.requestTemperatures();
+        temp = sensors.getTempC(sensorAddress);
         delay(100);
-    }
+    } while (temp < -50);
     return (temp);
 }
 
@@ -211,42 +213,6 @@ String readSD(String filename) {
     return out;
 }
 
-String parseHot(String line) {
-    int i1 = 0, i2 = 0;
-    for (i1 = 0; line.charAt(i1) != ' ' && i1 < 50; i1++) {
-    }
-    String time = line.substring(0, i1);
-
-    for (i2 = i1 + 1; line.charAt(i2) != ' ' && i2 < 50; i2++) {
-    }
-    String tempHot = line.substring(i1 + 1, i2);
-
-    String point = "{";
-    point += "x: " + time + "000, ";
-    point += "y: " + tempHot;
-    point += "}";
-    return point;
-}
-
-String parseCold(String line) {
-    int i1 = 0, i2 = 0, i3 = 0;
-    for (i1 = 0; line.charAt(i1) != ' ' && i1 < 50; i1++) {
-    }
-    String time = line.substring(0, i1);
-
-    for (i2 = i1 + 1; line.charAt(i2) != ' ' && i2 < 50; i2++) {
-    }
-    for (i3 = i2 + 1; line.charAt(i3) != ' ' && i3 < 50; i3++) {
-    }
-    String tempCold = line.substring(i2 + 1, i3);
-
-    String point = "{";
-    point += "x: " + time + "000, ";
-    point += "y: " + tempCold;
-    point += "}";
-    return point;
-}
-
 String* parseTemps(String line) {
     int i1 = 0, i2 = 0, i3 = 0;
     for (i1 = 0; line.charAt(i1) != ' ' && i1 < 50; i1++) {
@@ -270,7 +236,9 @@ String* parseTemps(String line) {
     pointCold += "y: " + tempCold;
     pointCold += "}";
 
-    String points[2] = {pointHot, pointCold};
+    String* points = new String[2];
+    points[0] = pointHot;
+    points[1] = pointCold;
     return points;
 }
 
@@ -286,7 +254,7 @@ void sendHTML(WiFiClient client) {
     String coldData = "";
 
     String history = readSD(logFileName);
-    // history.replace("\n", "<br />\n");
+
     std::istringstream stream(history.c_str());
     std::string line;
     while (std::getline(stream, line)) {
@@ -295,6 +263,7 @@ void sendHTML(WiFiClient client) {
         coldData += points[1] + ",";
     }
     hotData.remove(hotData.length() - 1, 1);
+    coldData.remove(coldData.length() - 1, 1);
 
     String html = String(index_html);
     html.replace("_HEAD_", R"===(<meta http-equiv="refresh" content="120" >)===");
@@ -306,6 +275,8 @@ void sendHTML(WiFiClient client) {
     html.replace("_TEMP1_", String(temp1));
     html.replace("_TEMP2_", String(temp2));
     html.replace("_TEMP-DIFF_", String(temp1 - temp2));
+
+    // history.replace("\n", "<br />\n");
     html.replace("_HISTORY_", "");
     html.replace("_HOTDATA_", hotData);
     html.replace("_COLDDATA_", coldData);
@@ -430,7 +401,7 @@ void loop() {
     unsigned long available = millis();
     while (!client.available()) {
         delay(10);
-        if (millis() - available > 3000) {
+        if (millis() - available > 1500) {
             Serial.println("failed to connect.\n");
             return;
         }
@@ -442,7 +413,7 @@ void loop() {
     handleRequest(request);
     sendHTML(client);
 
-    delay(10);
+    delay(100);
     Serial.println("Client disonnected");
     Serial.println("");
 }
