@@ -17,7 +17,7 @@ bool sdConnected = false;
 int ledStatus = LOW;
 
 const char* const logFileName = LOGFILE;
-unsigned long lastMeasuredTime = millis() - TIME_BETWEEN_MEASUREMENTS; // write first measurement on startup
+time_t lastLoggedTime = millis() - TIME_BETWEEN_MEASUREMENTS; // write first measurement on startup
 
 OneWire oneWire(ONE_WIRE_BUS);
 DallasTemperature sensors(&oneWire);
@@ -26,13 +26,21 @@ int dst = DST;
 
 WiFiServer server(80);
 
+String lastHTML = "Yo!";
+time_t lastTimeHTML = millis() - TIME_BETWEEN_MEASUREMENTS;
+
+float lastTemps[2];
+time_t lastTimeTemps = millis() - TIME_BETWEEN_MEASUREMENTS;
+
+String hotData = "";
+String coldData = "";
+
 // Declarations
 void configureTime();
 bool connectSD();
 void logSD(String filename, String line);
 void rename(String from, String to);
 void cleanHistory(String filename);
-float getTemp(const int sensorIndex);
 float getTemp(const DeviceAddress sensorAddress);
 void toggleLED(bool on);
 void toggleLED();
@@ -40,6 +48,7 @@ void handleRequest(String request);
 const String getTime();
 String readSD(String filename);
 void setupOTA();
+void initData();
 
 // Functions
 void configureTime() { configTime(TIMEZONE * 3600, dst * 3600, "pool.ntp.org", "time.nist.gov"); }
@@ -75,23 +84,27 @@ void cleanHistory(String filename) {
     rename(filename, newName);
 }
 
-float getTemp(const int sensorIndex) {
-    float temp = -100;
-    do {
-        sensors.requestTemperatures();
-        temp = sensors.getTempCByIndex(sensorIndex);
-        delay(100);
-    } while (temp < -50);
-    return (temp);
-}
 float getTemp(const DeviceAddress sensorAddress) {
     float temp = -100;
+    int i = 0;
     do {
         sensors.requestTemperatures();
         temp = sensors.getTempC(sensorAddress);
-        delay(100);
-    } while (temp < -50);
+        i++;
+        delay(50);
+    } while (temp < -50 && i < 10);
     return (temp);
+}
+
+void updateTemps() {
+    if (millis() - lastTimeTemps < TIME_BETWEEN_MEASUREMENTS) {
+        return;
+    }
+    lastTimeTemps = millis();
+    lastTemps[0] = getTemp(sensor1Address);
+    lastTemps[1] = getTemp(sensor2Address);
+    // lastTemps[0] = 11;
+    // lastTemps[1] = 12;
 }
 
 void toggleLED(bool on) {
@@ -180,6 +193,10 @@ void handleRequest(String request) {
         Serial.println("===");
         return;
     }
+    if (request.indexOf("/initdata") != -1) {
+        initData();
+        return;
+    }
 }
 
 const String getTime() {
@@ -203,7 +220,7 @@ String readSD(String filename) {
         Serial.println("Failed to open file on SD for reading.");
         sdConnected = false;
         connectSD();
-        return "";
+        return "Failed to open file on SD for reading.";
     }
     while (logFile.available() != 0) {
         String LineString = logFile.readStringUntil('\n');
@@ -242,31 +259,42 @@ String* parseTemps(String line) {
     return points;
 }
 
-void sendHTML(WiFiClient client) {
-    client.println("HTTP/1.1 200 OK");
-    client.println("Content-Type: text/html");
-    client.println("");
+void initData() {
+    // delay(1000);
+    String history = "";
+    // do {
+    //     history = readSD(logFileName);
+    //     delay(100);
+    // } while (history == "");
+    history = readSD(logFileName);
+    hotData = "Hey! " + history;
+    coldData = "data inited!";
+    // hotData = coldData = "";
+    // std::istringstream stream(history.c_str());
+    // std::string line;
+    // for (int i = 0; i < 300 && std::getline(stream, line); i++) {
+    //     String* points = parseTemps(String(line.c_str()));
+    //     hotData += points[0] + ",";
+    //     coldData += points[1] + ",";
+    // }
+    // hotData.remove(hotData.length() - 1, 1);
+    // coldData.remove(coldData.length() - 1, 1);
+}
 
-    float temp1 = getTemp(sensor1Address);
-    float temp2 = getTemp(sensor2Address);
-
-    String hotData = "";
-    String coldData = "";
-
-    String history = readSD(logFileName);
-
-    std::istringstream stream(history.c_str());
-    std::string line;
-    while (std::getline(stream, line)) {
-        String* points = parseTemps(String(line.c_str()));
-        hotData += points[0] + ",";
-        coldData += points[1] + ",";
+void updateHTML() {
+    if (millis() - lastTimeHTML < TIME_BETWEEN_MEASUREMENTS) {
+        return;
     }
-    hotData.remove(hotData.length() - 1, 1);
-    coldData.remove(coldData.length() - 1, 1);
+
+    lastTimeHTML = millis();
+    float temp1 = lastTemps[0];
+    float temp2 = lastTemps[1];
+
+    // String history = readSD(logFileName);
 
     String html = String(index_html);
-    html.replace("_HEAD_", R"===(<meta http-equiv="refresh" content="120" >)===");
+    html = String("HTTP/1.1 200 OK\nContent-Type: text/html\n\n") + html;
+    html.replace("_HEAD_", R"===(<meta http-equiv="refresh" content="300" >)===");
     html.replace("_IP_", WiFi.localIP().toString());
     html.replace("_SD-STATUS_", sdConnected ? "True" : "False");
     html.replace("_LED-STATUS_", ledStatus == HIGH ? "Off" : "On");
@@ -284,7 +312,7 @@ void sendHTML(WiFiClient client) {
     html.replace("_LASTHOT_", String(temp1));
     html.replace("_LASTCOLD_", String(temp2));
 
-    client.println(html);
+    lastHTML = html;
 }
 
 void setupOTA() {
@@ -380,17 +408,24 @@ void setup() {
         delay(300);
     }
 
+    initData();
+
     Serial.println("\n~~~ Setup Finished! ~~~\n\n");
 }
 
 void loop() {
     ArduinoOTA.handle();
-    if (millis() - lastMeasuredTime >= TIME_BETWEEN_MEASUREMENTS) {
-        float temp1 = getTemp(sensor1Address);
-        float temp2 = getTemp(sensor2Address);
-        logSD(logFileName,
-              String(getTimeRaw()) + " " + String(temp1) + " " + String(temp2) + " " + String(temp1 - temp2));
-        lastMeasuredTime = millis();
+    updateTemps();
+    if (millis() - lastLoggedTime >= TIME_BETWEEN_MEASUREMENTS) {
+        float temp1 = lastTemps[0];
+        float temp2 = lastTemps[1];
+        String line = String(getTimeRaw()) + " " + String(temp1) + " " + String(temp2) + " " + String(temp1 - temp2);
+        logSD(logFileName, line);
+
+        // String* points = parseTemps(String(line.c_str()));
+        // hotData += "," + points[0];
+        // coldData += "," + points[1];
+        lastLoggedTime = millis();
     }
 
     WiFiClient client = server.available();
@@ -411,7 +446,8 @@ void loop() {
     client.flush();
 
     handleRequest(request);
-    sendHTML(client);
+    updateHTML();
+    client.print(lastHTML);
 
     delay(100);
     Serial.println("Client disonnected");
