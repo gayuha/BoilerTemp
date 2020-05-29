@@ -9,6 +9,11 @@ const DeviceAddress sensor2Address = {0x28, 0x95, 0x1B, 0x77, 0x91, 0x04, 0x02, 
 
 #define LED_PIN 2
 #define TIME_BETWEEN_MEASUREMENTS 5 * 60 * 1000 // in milliseconds
+#define TIME_BETWEEN_HTML_UPDATES 5 * 60 * 1000 // in milliseconds
+#define MAX_POINTS_ON_GRAPH 150
+
+#define MAX_TEMP_MEASUREMENTS 10
+
 //#define REFRESH_RATE 2 * 60                     // in seconds
 
 #define LOGFILE "temp.log"

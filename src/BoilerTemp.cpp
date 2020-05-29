@@ -27,7 +27,7 @@ int dst = DST;
 WiFiServer server(80);
 
 String lastHTML = "Yo!";
-time_t lastTimeHTML = millis() - TIME_BETWEEN_MEASUREMENTS;
+time_t lastTimeHTML = millis() - TIME_BETWEEN_HTML_UPDATES;
 
 float lastTemps[2];
 time_t lastTimeTemps = millis() - TIME_BETWEEN_MEASUREMENTS;
@@ -49,6 +49,7 @@ const String getTime();
 String readSD(String filename);
 void setupOTA();
 void initData();
+void logTempsToSD();
 
 // Functions
 void configureTime() { configTime(TIMEZONE * 3600, dst * 3600, "pool.ntp.org", "time.nist.gov"); }
@@ -66,6 +67,7 @@ void logSD(String filename, String line) {
     }
     logFile.println(line);
     logFile.flush();
+    logFile.close();
     // Serial.println("Wrote to SD: ");
     // Serial.println(line);
 }
@@ -86,14 +88,21 @@ void cleanHistory(String filename) {
 
 float getTemp(const DeviceAddress sensorAddress) {
     float temp = -100;
-    int i = 0;
-    do {
+    float totalTemp = 0;
+    int goodTemps = 0;
+    for (int i = 0; i < MAX_TEMP_MEASUREMENTS; i++) {
         sensors.requestTemperatures();
         temp = sensors.getTempC(sensorAddress);
-        i++;
-        delay(50);
-    } while (temp < -50 && i < 10);
-    return (temp);
+        if (temp > -50) {
+            totalTemp += temp;
+            ++goodTemps;
+        }
+        delay(10);
+    }
+    if (goodTemps == 0) {
+        return -127;
+    }
+    return (totalTemp / goodTemps);
 }
 
 void updateTemps() {
@@ -215,18 +224,24 @@ time_t getTimeRaw() { return time(nullptr) - (TIMEZONE + DST) * 3600; }
 String readSD(String filename) {
     File logFile;
     String out = "";
-    logFile = SD.open(filename, FILE_READ);
+    int i = 0;
+    do {
+        logFile = SD.open(filename, FILE_READ);
+        i++;
+        delay(100);
+    } while (!logFile && i < 5);
     if (!logFile) {
         Serial.println("Failed to open file on SD for reading.");
         sdConnected = false;
         connectSD();
-        return "Failed to open file on SD for reading.";
+        return "Failed to open file on SD for reading: " + String(logFile);
     }
     while (logFile.available() != 0) {
         String LineString = logFile.readStringUntil('\n');
         LineString.concat("\n" + out);
         out = LineString;
     }
+    logFile.close();
     return out;
 }
 
@@ -260,59 +275,53 @@ String* parseTemps(String line) {
 }
 
 void initData() {
-    // delay(1000);
     String history = "";
-    // do {
-    //     history = readSD(logFileName);
-    //     delay(100);
-    // } while (history == "");
     history = readSD(logFileName);
-    hotData = "Hey! " + history;
-    coldData = "data inited!";
-    // hotData = coldData = "";
-    // std::istringstream stream(history.c_str());
-    // std::string line;
-    // for (int i = 0; i < 300 && std::getline(stream, line); i++) {
-    //     String* points = parseTemps(String(line.c_str()));
-    //     hotData += points[0] + ",";
-    //     coldData += points[1] + ",";
-    // }
-    // hotData.remove(hotData.length() - 1, 1);
-    // coldData.remove(coldData.length() - 1, 1);
+    // hotData = "Hey! " + history;
+    // coldData = "data inited!";
+    hotData = coldData = "";
+    std::istringstream stream(history.c_str());
+    std::string line;
+    for (int i = 0; i < MAX_POINTS_ON_GRAPH && std::getline(stream, line); i++) {
+        String* points = parseTemps(String(line.c_str()));
+        hotData += points[0] + ",";
+        coldData += points[1] + ",";
+    }
+    hotData.remove(hotData.length() - 1, 1);
+    coldData.remove(coldData.length() - 1, 1);
 }
 
 void updateHTML() {
-    if (millis() - lastTimeHTML < TIME_BETWEEN_MEASUREMENTS) {
+    if (millis() - lastTimeHTML < TIME_BETWEEN_HTML_UPDATES) {
         return;
     }
-
     lastTimeHTML = millis();
+
+    // initData();
     float temp1 = lastTemps[0];
     float temp2 = lastTemps[1];
 
     // String history = readSD(logFileName);
 
-    String html = String(index_html);
-    html = String("HTTP/1.1 200 OK\nContent-Type: text/html\n\n") + html;
-    html.replace("_HEAD_", R"===(<meta http-equiv="refresh" content="300" >)===");
-    html.replace("_IP_", WiFi.localIP().toString());
-    html.replace("_SD-STATUS_", sdConnected ? "True" : "False");
-    html.replace("_LED-STATUS_", ledStatus == HIGH ? "Off" : "On");
-    html.replace("_TIME_", getTime());
-    html.replace("_DST_", dst == 1 ? "On" : "Off");
-    html.replace("_TEMP1_", String(temp1));
-    html.replace("_TEMP2_", String(temp2));
-    html.replace("_TEMP-DIFF_", String(temp1 - temp2));
+    lastHTML = String(index_html);
+    lastHTML = String("HTTP/1.1 200 OK\nContent-Type: text/html\n\n") + lastHTML;
+    lastHTML.replace("_HEAD_", R"===(<meta http-equiv="refresh" content="300" >)===");
+    lastHTML.replace("_IP_", WiFi.localIP().toString());
+    lastHTML.replace("_SD-STATUS_", sdConnected ? "True" : "False");
+    lastHTML.replace("_LED-STATUS_", ledStatus == HIGH ? "Off" : "On");
+    lastHTML.replace("_TIME_", getTime());
+    lastHTML.replace("_DST_", dst == 1 ? "On" : "Off");
+    lastHTML.replace("_TEMP1_", String(temp1));
+    lastHTML.replace("_TEMP2_", String(temp2));
+    lastHTML.replace("_TEMP-DIFF_", String(temp1 - temp2));
 
     // history.replace("\n", "<br />\n");
-    html.replace("_HISTORY_", "");
-    html.replace("_HOTDATA_", hotData);
-    html.replace("_COLDDATA_", coldData);
+    lastHTML.replace("_HISTORY_", "");
+    lastHTML.replace("_HOTDATA_", hotData);
+    lastHTML.replace("_COLDDATA_", coldData);
 
-    html.replace("_LASTHOT_", String(temp1));
-    html.replace("_LASTCOLD_", String(temp2));
-
-    lastHTML = html;
+    lastHTML.replace("_LASTHOT_", String(temp1));
+    lastHTML.replace("_LASTCOLD_", String(temp2));
 }
 
 void setupOTA() {
@@ -389,10 +398,14 @@ void setup() {
 
     pinMode(SS, OUTPUT);
 
+    for (int i = 0; i < 10 && !connectSD(); i++) {
+        delay(100);
+    }
+
     sensors.begin();
 
     configureTime();
-    delay(500);
+    delay(100);
     Serial.print("\nWaiting for time...");
     while (!time(nullptr)) {
         Serial.print(".");
@@ -401,32 +414,37 @@ void setup() {
     Serial.print("\nGot Time. Current time is: ");
     Serial.println(getTime());
 
-    for (int i = 0; i < 4; i++) {
-        toggleLED(false);
-        delay(300);
-        toggleLED(true);
-        delay(300);
-    }
+    // for (int i = 0; i < 4; i++) {
+    //     toggleLED(false);
+    //     delay(300);
+    //     toggleLED(true);
+    //     delay(300);
+    // }
 
-    initData();
+    delay(200);
+    // initData();
 
     Serial.println("\n~~~ Setup Finished! ~~~\n\n");
 }
 
-void loop() {
-    ArduinoOTA.handle();
-    updateTemps();
+void logTempsToSD() {
     if (millis() - lastLoggedTime >= TIME_BETWEEN_MEASUREMENTS) {
         float temp1 = lastTemps[0];
         float temp2 = lastTemps[1];
         String line = String(getTimeRaw()) + " " + String(temp1) + " " + String(temp2) + " " + String(temp1 - temp2);
         logSD(logFileName, line);
-
-        // String* points = parseTemps(String(line.c_str()));
-        // hotData += "," + points[0];
-        // coldData += "," + points[1];
-        lastLoggedTime = millis();
+        /*
+        String* points = parseTemps(String(line.c_str()));
+        hotData = points[0] + "," + hotData;
+        coldData = points[1] + "," + coldData;
+        lastLoggedTime = millis();*/
     }
+}
+
+void loop() {
+    ArduinoOTA.handle();
+    updateTemps();
+    logTempsToSD();
 
     WiFiClient client = server.available();
     if (!client) {
@@ -443,11 +461,11 @@ void loop() {
     }
     String request = client.readStringUntil('\r');
     Serial.println(request);
-    client.flush();
 
     handleRequest(request);
     updateHTML();
     client.print(lastHTML);
+    client.flush();
 
     delay(100);
     Serial.println("Client disonnected");
