@@ -46,18 +46,22 @@ void toggleLED(bool on);
 void toggleLED();
 void handleRequest(String request);
 const String getTime();
-String readSD(String filename);
+String readSD(String filename, int maxLines = 200);
 void setupOTA();
 void initData();
 void logTempsToSD();
 
 // Functions
-void configureTime() { configTime(TIMEZONE * 3600, dst * 3600, "pool.ntp.org", "time.nist.gov"); }
+void configureTime() { configTime(TIMEZONE * 3600, dst * 3600, NTP_SERVER_1, NTP_SERVER_2); }
 
 bool connectSD() { return (sdConnected = SD.begin(SS)); }
 
 void logSD(String filename, String line) {
     File logFile;
+    if (!SD.exists(filename)) {
+        // file does not exist
+        Serial.println("File does not exist. Will attempt to create it.");
+    }
     logFile = SD.open(filename, FILE_WRITE);
     if (!logFile) {
         Serial.println("Failed to open file on SD for writing.");
@@ -84,6 +88,39 @@ void cleanHistory(String filename) {
     for (i = 0; SD.exists(newName = "backup_" + String(i) + ".log"); ++i)
         ;
     rename(filename, newName);
+}
+
+void printDirectory(File dir, int numTabs) {
+    while (true) {
+
+        File entry = dir.openNextFile();
+        if (!entry) {
+            // no more files
+            break;
+        }
+        for (uint8_t i = 0; i < numTabs; i++) {
+            Serial.print('\t');
+        }
+        Serial.print(entry.name());
+        if (entry.isDirectory()) {
+            Serial.println("/");
+            printDirectory(entry, numTabs + 1);
+        } else {
+            // files have sizes, directories do not
+            Serial.print("\t\t");
+            Serial.print(entry.size(), DEC);
+            time_t cr = entry.getCreationTime();
+            time_t lw = entry.getLastWrite();
+            struct tm* tmstruct = localtime(&cr);
+            Serial.printf("\tCREATION: %d-%02d-%02d %02d:%02d:%02d", (tmstruct->tm_year) + 1900, (tmstruct->tm_mon) + 1,
+                          tmstruct->tm_mday, tmstruct->tm_hour, tmstruct->tm_min, tmstruct->tm_sec);
+            tmstruct = localtime(&lw);
+            Serial.printf("\tLAST WRITE: %d-%02d-%02d %02d:%02d:%02d\n", (tmstruct->tm_year) + 1900,
+                          (tmstruct->tm_mon) + 1, tmstruct->tm_mday, tmstruct->tm_hour, tmstruct->tm_min,
+                          tmstruct->tm_sec);
+        }
+        entry.close();
+    }
 }
 
 float getTemp(const DeviceAddress sensorAddress) {
@@ -206,6 +243,15 @@ void handleRequest(String request) {
         initData();
         return;
     }
+    if (request.indexOf("/listfiles") != -1) {
+        Serial.println("Listing files on SD card!");
+        File root = SD.open("/");
+        if (!root) {
+            Serial.println("Failed to open root directory!");
+        }
+        printDirectory(root, 0);
+        return;
+    }
 }
 
 const String getTime() {
@@ -221,9 +267,16 @@ const String getTime() {
 
 time_t getTimeRaw() { return time(nullptr) - (TIMEZONE + DST) * 3600; }
 
-String readSD(String filename) {
+String readSD(String filename, int maxLines) {
     File logFile;
     String out = "";
+    if (sdConnected) {
+        if (!(logFile = SD.open(filename, FILE_READ))) {
+            // file does not exist
+            Serial.println("Failed to open file on SD for reading - File does not exist.");
+            return "";
+        }
+    }
     int i = 0;
     do {
         logFile = SD.open(filename, FILE_READ);
@@ -236,16 +289,19 @@ String readSD(String filename) {
         connectSD();
         return "Failed to open file on SD for reading: " + String(logFile);
     }
-    while (logFile.available() != 0) {
+    i = 0;
+    while (logFile.available() != 0 && i < maxLines) {
         String LineString = logFile.readStringUntil('\n');
         LineString.concat("\n" + out);
         out = LineString;
+        i++;
     }
     logFile.close();
     return out;
 }
 
 String* parseTemps(String line) {
+    Serial.println("Parsing line: " + line);
     int i1 = 0, i2 = 0, i3 = 0;
     for (i1 = 0; line.charAt(i1) != ' ' && i1 < 50; i1++) {
     }
@@ -275,6 +331,7 @@ String* parseTemps(String line) {
 }
 
 void initData() {
+    Serial.println("Initializing data!");
     String history = "";
     history = readSD(logFileName);
     // hotData = "Hey! " + history;
@@ -282,10 +339,12 @@ void initData() {
     hotData = coldData = "";
     std::istringstream stream(history.c_str());
     std::string line;
+    Serial.println("Starting to parse points!");
     for (int i = 0; i < MAX_POINTS_ON_GRAPH && std::getline(stream, line); i++) {
         String* points = parseTemps(String(line.c_str()));
         hotData += points[0] + ",";
         coldData += points[1] + ",";
+        Serial.println("points[0] = " + points[0] + ", points[1] = " + points[1]);
     }
     hotData.remove(hotData.length() - 1, 1);
     coldData.remove(coldData.length() - 1, 1);
@@ -301,7 +360,7 @@ void updateHTML() {
     float temp1 = lastTemps[0];
     float temp2 = lastTemps[1];
 
-    // String history = readSD(logFileName);
+    String history = readSD(logFileName);
 
     lastHTML = String(index_html);
     lastHTML = String("HTTP/1.1 200 OK\nContent-Type: text/html\n\n") + lastHTML;
@@ -315,8 +374,8 @@ void updateHTML() {
     lastHTML.replace("_TEMP2_", String(temp2));
     lastHTML.replace("_TEMP-DIFF_", String(temp1 - temp2));
 
-    // history.replace("\n", "<br />\n");
-    lastHTML.replace("_HISTORY_", "");
+    history.replace("\n", "<br />\n");
+    lastHTML.replace("_HISTORY_", history);
     lastHTML.replace("_HOTDATA_", hotData);
     lastHTML.replace("_COLDDATA_", coldData);
 
@@ -436,8 +495,8 @@ void logTempsToSD() {
         /*
         String* points = parseTemps(String(line.c_str()));
         hotData = points[0] + "," + hotData;
-        coldData = points[1] + "," + coldData;
-        lastLoggedTime = millis();*/
+        coldData = points[1] + "," + coldData;*/
+        lastLoggedTime = millis();
     }
 }
 
