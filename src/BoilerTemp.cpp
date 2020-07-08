@@ -17,7 +17,7 @@ bool sdConnected = false;
 int ledStatus = LOW;
 
 const char* const logFileName = LOGFILE;
-time_t lastLoggedTime = millis() - TIME_BETWEEN_MEASUREMENTS; // write first measurement on startup
+time_t lastLoggedTime = millis();
 
 OneWire oneWire(ONE_WIRE_BUS);
 DallasTemperature sensors(&oneWire);
@@ -50,6 +50,7 @@ String readSD(String filename, int maxLines = 200);
 void setupOTA();
 void initData();
 void logTempsToSD();
+void updateHTML();
 
 // Functions
 void configureTime() { configTime(TIMEZONE * 3600, dst * 3600, NTP_SERVER_1, NTP_SERVER_2); }
@@ -252,6 +253,16 @@ void handleRequest(String request) {
         printDirectory(root, 0);
         return;
     }
+
+    if (request.indexOf("/force") != -1) {
+        Serial.println("Forcing Full Update!");
+        lastLoggedTime = millis() - TIME_BETWEEN_MEASUREMENTS - 1;
+        lastTimeHTML = millis() - TIME_BETWEEN_HTML_UPDATES - 1;
+        lastTimeTemps = millis() - TIME_BETWEEN_MEASUREMENTS - 1;
+        updateTemps();
+        logTempsToSD();
+        updateHTML();
+    }
 }
 
 const String getTime() {
@@ -356,7 +367,7 @@ void updateHTML() {
     }
     lastTimeHTML = millis();
 
-    // initData();
+    initData();
     float temp1 = lastTemps[0];
     float temp2 = lastTemps[1];
 
