@@ -1,11 +1,10 @@
 #include <Arduino.h>
-#include <ArduinoOTA.h>
 
 #include <DallasTemperature.h>
 
 #include <ESP8266WiFi.h>
-#include <SD.h>
-#include <SPI.h>
+#include <FS.h>
+#include <LittleFS.h>
 #include <time.h>
 
 #include <sstream>
@@ -29,7 +28,7 @@ WiFiServer server(80);
 String lastHTML = "Yo!";
 time_t lastTimeHTML = millis() - TIME_BETWEEN_HTML_UPDATES;
 
-float lastTemps[2];
+byte lastTemps[2];
 time_t lastTimeTemps = millis() - TIME_BETWEEN_MEASUREMENTS;
 
 String hotData = "";
@@ -37,7 +36,6 @@ String coldData = "";
 
 // Declarations
 void configureTime();
-bool connectSD();
 void logSD(String filename, String line);
 void rename(String from, String to);
 void cleanHistory(String filename);
@@ -46,81 +44,103 @@ void toggleLED(bool on);
 void toggleLED();
 void handleRequest(String request);
 const String getTime();
-String readSD(String filename, int maxLines = 200);
-void setupOTA();
+byte* readSD(String filename, int maxLines = 200);
 void initData();
-void logTempsToSD();
+void logTemps();
 void updateHTML();
 
 // Functions
-void configureTime() { configTime(TIMEZONE * 3600, dst * 3600, NTP_SERVER_1, NTP_SERVER_2); }
-
-bool connectSD() { return (sdConnected = SD.begin(SS)); }
-
-void logSD(String filename, String line) {
-    File logFile;
-    if (!SD.exists(filename)) {
-        // file does not exist
-        Serial.println("File does not exist. Will attempt to create it.");
-    }
-    logFile = SD.open(filename, FILE_WRITE);
-    if (!logFile) {
-        Serial.println("Failed to open file on SD for writing.");
-        sdConnected = false;
-        connectSD();
-        return;
-    }
-    logFile.println(line);
-    logFile.flush();
-    logFile.close();
-    // Serial.println("Wrote to SD: ");
-    // Serial.println(line);
+void configureTime() {
+    configTime(TIMEZONE * 3600, dst * 3600, NTP_SERVER_1, NTP_SERVER_2);
 }
 
-void rename(String from, String to) {
-    String data = readSD(from);
-    logSD(to, data);
-    SD.remove(from);
+void renameFile(const char* path1, const char* path2) {
+    Serial.printf("Renaming file %s to %s\n", path1, path2);
+    if (LittleFS.rename(path1, path2)) {
+        Serial.println("File renamed");
+    } else {
+        Serial.println("Rename failed");
+    }
+}
+
+void writeFile(const char* path, const char* message) {
+    Serial.printf("Writing file: %s\n", path);
+
+    File file = LittleFS.open(path, "w");
+    if (!file) {
+        Serial.println("Failed to open file for writing");
+        return;
+    }
+    if (file.print(message)) {
+        Serial.println("File written");
+    } else {
+        Serial.println("Write failed");
+    }
+    delay(2000); // Make sure the CREATE and LASTWRITE times are different
+    file.close();
+}
+
+void appendFile(const char* path, const byte* message, size_t size) {
+    Serial.printf("Appending to file: %s\n", path);
+
+    File file = LittleFS.open(path, "a");
+    if (!file) {
+        Serial.println("Failed to open file for appending.");
+        return;
+    }
+    if (file.write(message, size)) {
+        Serial.println("Message appended");
+    } else {
+        Serial.println("Append failed");
+    }
+    file.close();
+}
+
+void appendFile(const char* path, const char* message) {
+    Serial.printf("Appending to file: %s, message: %s\n", path, message);
+
+    File file = LittleFS.open(path, "a");
+    if (!file) {
+        Serial.println("Failed to open file for appending. Trying to write instead.");
+        writeFile(path, message);
+        return;
+    }
+    if (file.print(message)) {
+        Serial.println("Message appended");
+    } else {
+        Serial.println("Append failed");
+    }
+    file.close();
 }
 
 void cleanHistory(String filename) {
     int i = 0;
     String newName;
-    for (i = 0; SD.exists(newName = "backup_" + String(i) + ".log"); ++i)
+    for (i = 0; LittleFS.exists(newName = "backup_" + String(i) + ".log"); ++i)
         ;
-    rename(filename, newName);
+    renameFile(filename.c_str(), newName.c_str());
 }
 
-void printDirectory(File dir, int numTabs) {
-    while (true) {
+void listDir(const char* dirname) {
+    Serial.printf("Listing directory: %s\n", dirname);
 
-        File entry = dir.openNextFile();
-        if (!entry) {
-            // no more files
-            break;
-        }
-        for (uint8_t i = 0; i < numTabs; i++) {
-            Serial.print('\t');
-        }
-        Serial.print(entry.name());
-        if (entry.isDirectory()) {
-            Serial.println("/");
-            printDirectory(entry, numTabs + 1);
-        } else {
-            // files have sizes, directories do not
-            Serial.print("\t\t");
-            Serial.print(entry.size(), DEC);
-            time_t cr = entry.getCreationTime();
-            time_t lw = entry.getLastWrite();
-            struct tm* tmstruct = localtime(&cr);
-            Serial.printf("\tCREATION: %d-%02d-%02d %02d:%02d:%02d", (tmstruct->tm_year) + 1900, (tmstruct->tm_mon) + 1,
-                          tmstruct->tm_mday, tmstruct->tm_hour, tmstruct->tm_min, tmstruct->tm_sec);
-            tmstruct = localtime(&lw);
-            Serial.printf("\tLAST WRITE: %d-%02d-%02d %02d:%02d:%02d\n", (tmstruct->tm_year) + 1900,
-                          (tmstruct->tm_mon) + 1, tmstruct->tm_mday, tmstruct->tm_hour, tmstruct->tm_min,
-                          tmstruct->tm_sec);
-        }
-        entry.close();
+    Dir root = LittleFS.openDir(dirname);
+
+    while (root.next()) {
+        File file = root.openFile("r");
+        Serial.print("  FILE: ");
+        Serial.print(root.fileName());
+        Serial.print("  SIZE: ");
+        Serial.print(file.size());
+        time_t cr = file.getCreationTime();
+        time_t lw = file.getLastWrite();
+        file.close();
+        struct tm* tmstruct = localtime(&cr);
+        Serial.printf("    CREATION: %d-%02d-%02d %02d:%02d:%02d\n", (tmstruct->tm_year) + 1900, (tmstruct->tm_mon) + 1,
+                      tmstruct->tm_mday, tmstruct->tm_hour, tmstruct->tm_min, tmstruct->tm_sec);
+        tmstruct = localtime(&lw);
+        Serial.printf("  LAST WRITE: %d-%02d-%02d %02d:%02d:%02d\n", (tmstruct->tm_year) + 1900, (tmstruct->tm_mon) + 1,
+                      tmstruct->tm_mday, tmstruct->tm_hour, tmstruct->tm_min, tmstruct->tm_sec);
     }
 }
 
@@ -147,11 +167,10 @@ void updateTemps() {
     if (millis() - lastTimeTemps < TIME_BETWEEN_MEASUREMENTS) {
         return;
     }
-    lastTimeTemps = millis();
     lastTemps[0] = getTemp(sensor1Address);
     lastTemps[1] = getTemp(sensor2Address);
-    // lastTemps[0] = 11;
-    // lastTemps[1] = 12;
+
+    lastTimeTemps = millis();
 }
 
 void toggleLED(bool on) {
@@ -199,10 +218,6 @@ void handleRequest(String request) {
         toggleLED();
         return;
     }
-    if (request.indexOf("/sd") != -1) {
-        connectSD();
-        return;
-    }
     if (request.indexOf("/dst=off") != -1) {
         dst = 0;
         configureTime();
@@ -246,11 +261,7 @@ void handleRequest(String request) {
     }
     if (request.indexOf("/listfiles") != -1) {
         Serial.println("Listing files on SD card!");
-        File root = SD.open("/");
-        if (!root) {
-            Serial.println("Failed to open root directory!");
-        }
-        printDirectory(root, 0);
+        listDir("/");
         return;
     }
 
@@ -260,7 +271,7 @@ void handleRequest(String request) {
         lastTimeHTML = millis() - TIME_BETWEEN_HTML_UPDATES - 1;
         lastTimeTemps = millis() - TIME_BETWEEN_MEASUREMENTS - 1;
         updateTemps();
-        logTempsToSD();
+        logTemps();
         updateHTML();
     }
 }
@@ -276,62 +287,40 @@ const String getTime() {
     return (strNow);
 }
 
-time_t getTimeRaw() { return time(nullptr) - (TIMEZONE + DST) * 3600; }
-
-String readSD(String filename, int maxLines) {
-    File logFile;
-    String out = "";
-    if (sdConnected) {
-        if (!(logFile = SD.open(filename, FILE_READ))) {
-            // file does not exist
-            Serial.println("Failed to open file on SD for reading - File does not exist.");
-            return "";
-        }
-    }
-    int i = 0;
-    do {
-        logFile = SD.open(filename, FILE_READ);
-        i++;
-        delay(100);
-    } while (!logFile && i < 5);
-    if (!logFile) {
-        Serial.println("Failed to open file on SD for reading.");
-        sdConnected = false;
-        connectSD();
-        return "Failed to open file on SD for reading: " + String(logFile);
-    }
-    i = 0;
-    while (logFile.available() != 0 && i < maxLines) {
-        String LineString = logFile.readStringUntil('\n');
-        LineString.concat("\n" + out);
-        out = LineString;
-        i++;
-    }
-    logFile.close();
-    return out;
+time_t getTimeRaw() {
+    return time(nullptr) - (TIMEZONE + dst) * 3600;
 }
 
-String* parseTemps(String line) {
-    Serial.println("Parsing line: " + line);
-    int i1 = 0, i2 = 0, i3 = 0;
-    for (i1 = 0; line.charAt(i1) != ' ' && i1 < 50; i1++) {
-    }
-    String time = line.substring(0, i1);
+byte* readSD(String filename, int maxLines) {
+    File logFile;
+    byte* buffer = (byte*)calloc(maxLines, 1);
+    logFile = LittleFS.open(filename.c_str(), "r");
+    logFile.read(buffer, sizeof(buffer));
+    logFile.close();
+    return buffer;
+}
 
-    for (i2 = i1 + 1; line.charAt(i2) != ' ' && i2 < 50; i2++) {
+String* parseTemps(const byte* bytes) {
+    Serial.println("Parsing line");
+    String timeStr;
+    time_t time = 0;
+
+    // Assuming little endian
+    for (size_t i = 0, mult = 1; i < sizeof(time_t); i++, mult *= 2) {
+        time += bytes[i] * mult;
     }
-    String tempHot = line.substring(i1 + 1, i2);
-    for (i3 = i2 + 1; line.charAt(i3) != ' ' && i3 < 50; i3++) {
-    }
-    String tempCold = line.substring(i2 + 1, i3);
+    timeStr = String(time);
+
+    String tempHot = String(bytes[sizeof(time_t)]);
+    String tempCold = String(bytes[sizeof(time_t) + 1]);
 
     String pointHot = "{";
-    pointHot += "x: " + time + "000, ";
+    pointHot += "x: " + timeStr + "000, ";
     pointHot += "y: " + tempHot;
     pointHot += "}";
 
     String pointCold = "{";
-    pointCold += "x: " + time + "000, ";
+    pointCold += "x: " + timeStr + "000, ";
     pointCold += "y: " + tempCold;
     pointCold += "}";
 
@@ -343,22 +332,24 @@ String* parseTemps(String line) {
 
 void initData() {
     Serial.println("Initializing data!");
-    String history = "";
-    history = readSD(logFileName);
+    byte* history = readSD(logFileName);
     // hotData = "Hey! " + history;
     // coldData = "data inited!";
     hotData = coldData = "";
-    std::istringstream stream(history.c_str());
-    std::string line;
     Serial.println("Starting to parse points!");
-    for (int i = 0; i < MAX_POINTS_ON_GRAPH && std::getline(stream, line); i++) {
-        String* points = parseTemps(String(line.c_str()));
+    for (int i = 0; i < MAX_POINTS_ON_GRAPH; i++) {
+        byte* line = history + i * 10;
+        if (*line == 0) {
+            break;
+        }
+        String* points = parseTemps(line);
         hotData += points[0] + ",";
         coldData += points[1] + ",";
         Serial.println("points[0] = " + points[0] + ", points[1] = " + points[1]);
     }
     hotData.remove(hotData.length() - 1, 1);
     coldData.remove(coldData.length() - 1, 1);
+    free(history);
 }
 
 void updateHTML() {
@@ -366,12 +357,11 @@ void updateHTML() {
         return;
     }
     lastTimeHTML = millis();
+    Serial.println("Updating HTML!");
 
     initData();
-    float temp1 = lastTemps[0];
-    float temp2 = lastTemps[1];
 
-    String history = readSD(logFileName);
+    byte* history = readSD(logFileName);
 
     lastHTML = String(index_html);
     lastHTML = String("HTTP/1.1 200 OK\nContent-Type: text/html\n\n") + lastHTML;
@@ -381,53 +371,33 @@ void updateHTML() {
     lastHTML.replace("_LED-STATUS_", ledStatus == HIGH ? "Off" : "On");
     lastHTML.replace("_TIME_", getTime());
     lastHTML.replace("_DST_", dst == 1 ? "On" : "Off");
-    lastHTML.replace("_TEMP1_", String(temp1));
-    lastHTML.replace("_TEMP2_", String(temp2));
-    lastHTML.replace("_TEMP-DIFF_", String(temp1 - temp2));
+    lastHTML.replace("_TEMP1_", String(lastTemps[0]));
+    lastHTML.replace("_TEMP2_", String(lastTemps[1]));
+    lastHTML.replace("_TEMP-DIFF_", String(lastTemps[0] - lastTemps[1]));
 
-    history.replace("\n", "<br />\n");
-    lastHTML.replace("_HISTORY_", history);
+    lastHTML.replace("_HISTORY_", reinterpret_cast<char*>(history));
     lastHTML.replace("_HOTDATA_", hotData);
     lastHTML.replace("_COLDDATA_", coldData);
 
-    lastHTML.replace("_LASTHOT_", String(temp1));
-    lastHTML.replace("_LASTCOLD_", String(temp2));
+    lastHTML.replace("_LASTHOT_", String(lastTemps[0]));
+    lastHTML.replace("_LASTCOLD_", String(lastTemps[1]));
 }
 
-void setupOTA() {
-    ArduinoOTA.setPort(3232);
-    ArduinoOTA.onStart([]() {
-        String type;
-        if (ArduinoOTA.getCommand() == U_FLASH)
-            type = "sketch";
-        else // U_SPIFFS
-            type = "filesystem";
-
-        // NOTE: if updating SPIFFS this would be the place to unmount SPIFFS using SPIFFS.end()
-        Serial.println("Start updating " + type);
-    });
-
-    ArduinoOTA.onEnd([]() { Serial.println("\nEnd"); });
-
-    ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
-        Serial.printf("Progress: %u%%\r", (progress / (total / 100)));
-    });
-
-    ArduinoOTA.onError([](ota_error_t error) {
-        Serial.printf("Error[%u]: ", error);
-        if (error == OTA_AUTH_ERROR)
-            Serial.println("Auth Failed");
-        else if (error == OTA_BEGIN_ERROR)
-            Serial.println("Begin Failed");
-        else if (error == OTA_CONNECT_ERROR)
-            Serial.println("Connect Failed");
-        else if (error == OTA_RECEIVE_ERROR)
-            Serial.println("Receive Failed");
-        else if (error == OTA_END_ERROR)
-            Serial.println("End Failed");
-    });
-
-    ArduinoOTA.begin();
+void logTemps() {
+    if (millis() - lastLoggedTime >= TIME_BETWEEN_MEASUREMENTS) {
+        Serial.println("Logging Temps!");
+        time_t* time = (time_t*)malloc(sizeof(time_t));
+        *time = getTimeRaw();
+        byte* line = (byte*)malloc(10);
+        memcpy(line, time, 8);
+        line[8] = lastTemps[0];
+        line[9] = lastTemps[1];
+        // String line = String(getTimeRaw()) + " " + String(lastTemps[0]) + " " + String(lastTemps[1]);
+        appendFile(logFileName, line, 10);
+        free(line);
+        free(time);
+        lastLoggedTime = millis();
+    }
 }
 
 void setup() {
@@ -456,10 +426,6 @@ void setup() {
     }
     WiFi.config(IPAddress(IP), IPAddress(GATEWAY), IPAddress(SUBNET));
 
-    Serial.println("Setting up OTA...");
-    setupOTA();
-    Serial.println("OTA setup end.");
-
     Serial.println("");
     Serial.println("WiFi connected.");
 
@@ -468,19 +434,16 @@ void setup() {
 
     pinMode(SS, OUTPUT);
 
-    for (int i = 0; i < 10 && !connectSD(); i++) {
-        delay(100);
-    }
-
     sensors.begin();
 
     configureTime();
-    delay(100);
+    delay(1000);
     Serial.print("\nWaiting for time...");
     while (!time(nullptr)) {
         Serial.print(".");
         delay(500);
     }
+    delay(1000);
     Serial.print("\nGot Time. Current time is: ");
     Serial.println(getTime());
 
@@ -491,30 +454,20 @@ void setup() {
     //     delay(300);
     // }
 
+    if (!LittleFS.begin()) {
+        Serial.println("LittleFS mount failed");
+        ESP.restart();
+    }
+
     delay(200);
     // initData();
 
     Serial.println("\n~~~ Setup Finished! ~~~\n\n");
 }
 
-void logTempsToSD() {
-    if (millis() - lastLoggedTime >= TIME_BETWEEN_MEASUREMENTS) {
-        float temp1 = lastTemps[0];
-        float temp2 = lastTemps[1];
-        String line = String(getTimeRaw()) + " " + String(temp1) + " " + String(temp2) + " " + String(temp1 - temp2);
-        logSD(logFileName, line);
-        /*
-        String* points = parseTemps(String(line.c_str()));
-        hotData = points[0] + "," + hotData;
-        coldData = points[1] + "," + coldData;*/
-        lastLoggedTime = millis();
-    }
-}
-
 void loop() {
-    ArduinoOTA.handle();
     updateTemps();
-    logTempsToSD();
+    logTemps();
 
     WiFiClient client = server.available();
     if (!client) {
