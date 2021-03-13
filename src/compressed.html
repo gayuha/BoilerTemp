@@ -4,6 +4,7 @@ _HEAD_
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.9.3/Chart.bundle.min.js" integrity="sha256-TQq84xX6vkwR0Qs1qH5ADkP+MvH0W+9E7TdHJsoIQiM=" crossorigin="anonymous"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-annotation/0.5.7/chartjs-plugin-annotation.min.js" integrity="sha256-Olnajf3o9kfkFGloISwP1TslJiWUDd7IYmfC+GdCKd4=" crossorigin="anonymous"></script>
 <style>canvas{max-width:500px!important;max-height:500px!important}</style>
+<link rel='icon' href='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAS0lEQVR42s2SMQ4AIAjE+P+ncSYdasgNXMJgcyIIlVKPIKdvioAXyWBeJmVpqRZKWtj9QWAKZyWll50b8IcL9JUeQF50n28ckyb0ADG8RLwp05YBAAAAAElFTkSuQmCC' type='image/x-png' />
 </head>
 <body>
 <p>
@@ -16,7 +17,7 @@ Temperature 2: _TEMP2_ &deg;C<br />
 Temp1 - Temp2 = _TEMP-DIFF_ &deg;C<br /></p>
 <div id="chart">
 <canvas id="myChart" width="400" height="400"></canvas>
-<script>var ctx=document.getElementById("myChart").getContext("2d");var scatterChart=new Chart(ctx,{type:"line",data:{datasets:[{label:"Input",data:[_HOTDATA_],borderColor:"red",fill:false},{label:"Output",data:[_COLDDATA_],borderColor:"blue",fill:false}]},options:{responsive:true,maintainAspectRatio:false,scales:{xAxes:[{type:"time",display:true,scaleLabel:{display:true,labelString:"Date"},time:{displayFormats:{minute:"HH:mm"}}}]},annotation:{annotations:[{type:"line",mode:"horizontal",scaleID:"y-axis-0",borderColor:"red",value:_LASTHOT_,borderWidth:3},{type:"line",mode:"horizontal",scaleID:"y-axis-0",borderColor:"blue",value:_LASTCOLD_,borderWidth:3}]}}});</script>
+<script>var ctx=document.getElementById("myChart").getContext("2d");var scatterChart=new Chart(ctx,{type:"line",data:{datasets:[{label:"Input",data:[_HOTDATA_],borderColor:"red",fill:false},{label:"Output",data:[_COLDDATA_],borderColor:"blue",fill:false}]},options:{responsive:true,maintainAspectRatio:false,scales:{xAxes:[{type:"time",display:true,scaleLabel:{display:true,labelString:"Date"},time:{displayFormats:{minute:"HH:mm"}}}]},annotation:{annotations:[{type:"line",mode:"horizontal",scaleID:"y-axis-0",borderColor:"red",value:_LASTHOT_,borderWidth:2},{type:"line",mode:"horizontal",scaleID:"y-axis-0",borderColor:"blue",value:_LASTCOLD_,borderWidth:2}]}}});</script>
 </div>
 <p>
 Available commands:<br />

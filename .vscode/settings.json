@@ -8,6 +8,14 @@
         "ostream": "cpp",
         "sstream": "cpp",
         "streambuf": "cpp",
-        "string": "cpp"
+        "string": "cpp",
+        "array": "cpp",
+        "deque": "cpp",
+        "list": "cpp",
+        "map": "cpp",
+        "unordered_map": "cpp",
+        "vector": "cpp",
+        "functional": "cpp",
+        "istream": "cpp"
     }
 }

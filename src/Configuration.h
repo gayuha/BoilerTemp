@@ -12,7 +12,7 @@ const DeviceAddress sensor2Address = {0x28, 0x95, 0x1B, 0x77, 0x91, 0x04, 0x02, 
 #define LED_PIN 2
 #define TIME_BETWEEN_MEASUREMENTS 15 * 60 * 1000 // in milliseconds
 #define TIME_BETWEEN_HTML_UPDATES 1 * 60 * 1000  // in milliseconds
-#define MAX_POINTS_ON_GRAPH 192                  // 15 minutes per point, 192 points, total of 48 hrs
+#define MAX_POINTS_ON_GRAPH 144                  // 15 minutes per point, 144 points, total of 36 hrs
 
 #define MAX_TEMP_MEASUREMENTS 10
 #define DELAY_BETWEEN_MEASUREMENTS 100 // in milliseconds
@@ -36,3 +36,5 @@ const DeviceAddress sensor2Address = {0x28, 0x95, 0x1B, 0x77, 0x91, 0x04, 0x02, 
 
 #define NTP_SERVER_1 "pool.ntp.org"
 #define NTP_SERVER_2 "time.nist.gov"
+
+#define DEBUG false

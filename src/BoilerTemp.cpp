@@ -30,14 +30,17 @@ String lastHTML = "Yo!";
 time_t lastTimeHTML = millis() - TIME_BETWEEN_HTML_UPDATES;
 
 byte lastTemps[2];
+byte lastTempsGood[2];
 time_t lastTimeTemps = millis() - TIME_BETWEEN_MEASUREMENTS;
 
 String hotData = "";
 String coldData = "";
+String bytesToString_out = "";
 
 int position;
 
 bool temperatureError = false;
+bool debug = DEBUG;
 
 // Declarations
 void configureTime();
@@ -83,20 +86,26 @@ String byteToString(const byte _byte) {
     return out;
 }
 
-String bytesToString(const byte* bytes, int count = MAX_BYTES_TO_READ) {
-    String out = "";
+String& bytesToString(const byte* bytes, int count = MAX_BYTES_TO_READ) {
+    Serial.println("Converting bytes to String!");
+    bytesToString_out = "";
+    if (bytes == nullptr) {
+        Serial.println("Bytes are nullptr");
+        return bytesToString_out;
+    }
     for (int i = 0; i < count; i++) {
         // Serial.print(String(i) + ", ");
         if (i % TOTAL_LOG_LINE_SIZE == 0) {
-            out += "\n";
+            bytesToString_out += "\n";
         }
         if (i % TOTAL_LOG_LINE_SIZE == (TOTAL_LOG_LINE_SIZE - TEMP_SIZE * 2) ||
             i % TOTAL_LOG_LINE_SIZE == (TOTAL_LOG_LINE_SIZE - TEMP_SIZE)) {
-            out += " ";
+            bytesToString_out += " ";
         }
-        out += byteToString(bytes[i]);
+        bytesToString_out += byteToString(bytes[i]);
     }
-    return out;
+    Serial.printf("Converted String length is %d\n", bytesToString_out.length());
+    return bytesToString_out;
 }
 
 int getPosition() {
@@ -130,7 +139,7 @@ void renameFile(const char* path1, const char* path2) {
 }
 
 void writeFile(const char* path, const char* message) {
-    Serial.printf("Writing file: %s\n", path);
+    Serial.printf("Writing file: %s, message: %s... ", path, message);
 
     File file = LittleFS.open(path, "w");
     if (!file) {
@@ -138,37 +147,21 @@ void writeFile(const char* path, const char* message) {
         return;
     }
     if (file.print(message)) {
-        Serial.println("File written");
+        Serial.println("File written.");
     } else {
-        Serial.println("Write failed");
+        Serial.println("Write failed.");
     }
     delay(1100); // Make sure the CREATE and LASTWRITE times are different
     file.close();
 }
 
-void appendFile(const char* path, const byte* message, size_t size) {
-    Serial.printf("Appending to file: %s, message: %s\n", path, bytesToString(message, size).c_str());
-
-    File file = LittleFS.open(path, "a");
-    if (!file) {
-        Serial.println("Failed to open file for appending.");
-        return;
-    }
-    if (file.write(message, size)) {
-        Serial.println("Message appended.");
-    } else {
-        Serial.println("Append failed.");
-    }
-    file.close();
-}
-
 void appendFileAtPosition(const char* path, const byte* message, size_t size, int pos) {
-    Serial.printf("Appending to file: %s, message: %s, position: %d\n", path, bytesToString(message, size).c_str(),
+    Serial.printf("Appending to file: %s, message: %s, position: %d... ", path, bytesToString(message, size).c_str(),
                   pos);
 
     File file = LittleFS.open(path, "r+");
     if (!file) {
-        Serial.println("Failed to open file for appending. Trying to create the file.");
+        Serial.print("Failed to open file for appending. Trying to create the file... ");
         file = LittleFS.open(path, "w");
         if (!file) {
             Serial.println("Failed to create the file.");
@@ -202,7 +195,7 @@ void readFile(const char* path) {
 }
 
 byte* readFileToByteArray(const char* path, int length) {
-    Serial.printf("Reading file: %s\n", path);
+    Serial.printf("Reading file: %s... ", path);
     byte* out = (byte*)calloc(length, sizeof(byte));
 
     File file = LittleFS.open(path, "r");
@@ -214,10 +207,10 @@ byte* readFileToByteArray(const char* path, int length) {
     // Serial.print("Read from file: ");
     int i = 0;
     while (file.available() && i < length) {
-        out[i] = file.read();
-        i++;
+        out[i++] = file.read();
     }
     file.close();
+    Serial.printf("Read %d bytes.\n", i);
     return out;
 }
 
@@ -284,6 +277,13 @@ void updateTemps() {
     lastTemps[0] = getTemp(sensor1Address);
     lastTemps[1] = getTemp(sensor2Address);
 
+    if (lastTemps[0] != BAD_TEMP) {
+        lastTempsGood[0] = lastTempsGood[0];
+    }
+    if (lastTemps[1] != BAD_TEMP) {
+        lastTempsGood[1] = lastTempsGood[1];
+    }
+
     lastTimeTemps = millis();
 }
 
@@ -324,6 +324,15 @@ void formatLittleFS() {
     LittleFS.format();
     position = 0;
     savePosition(position);
+}
+
+void forceUpdate() {
+    lastLoggedTime = millis() - TIME_BETWEEN_MEASUREMENTS - 1;
+    lastTimeHTML = millis() - TIME_BETWEEN_HTML_UPDATES - 1;
+    lastTimeTemps = millis() - TIME_BETWEEN_MEASUREMENTS - 1;
+    updateTemps();
+    logTemps();
+    updateHTML();
 }
 
 void handleRequest(String request) {
@@ -378,17 +387,21 @@ void handleRequest(String request) {
 
     if (request.indexOf("/force") != -1) {
         Serial.println("Forcing Full Update!");
-        lastLoggedTime = millis() - TIME_BETWEEN_MEASUREMENTS - 1;
-        lastTimeHTML = millis() - TIME_BETWEEN_HTML_UPDATES - 1;
-        lastTimeTemps = millis() - TIME_BETWEEN_MEASUREMENTS - 1;
-        updateTemps();
-        logTemps();
-        updateHTML();
+        forceUpdate();
         return;
     }
 
     if (request.indexOf("/format") != -1) {
         formatLittleFS();
+        forceUpdate();
+        return;
+    }
+
+    if (request.indexOf("/debug") != -1) {
+        Serial.printf("Debug was %s, ", debug ? "on" : "off");
+        debug = !debug;
+        Serial.printf("now it is %s.\n", debug ? "on" : "off");
+        forceUpdate();
         return;
     }
 }
@@ -438,18 +451,26 @@ String* parseTemps(const byte* bytes) {
 
 void initData() {
     Serial.println("Initializing data!");
+    hotData = coldData = "";
     byte* history = readFileToByteArray(logFileName, MAX_BYTES_TO_READ);
     if (history == nullptr) {
         Serial.println("History byte array is nullptr.");
         return;
     }
-    // hotData = "Hey! " + history;
-    // coldData = "data inited!";
-    hotData = coldData = "";
+
     Serial.println("Starting to parse points!");
-    for (int i = 0; i < MAX_POINTS_ON_GRAPH; i++) {
-        byte* line = history + i * TOTAL_LOG_LINE_SIZE;
-        if (*line == 0) {
+    int pointCount = 0;
+    for (pointCount = 0; pointCount < MAX_POINTS_ON_GRAPH; pointCount++) {
+        byte* line = history + pointCount * TOTAL_LOG_LINE_SIZE;
+        bool allZero = true;
+        for (int i = 0; i < TOTAL_LOG_LINE_SIZE; i++) {
+            if (line[i] != 0) {
+                allZero = false;
+                break;
+            }
+        }
+
+        if (allZero) {
             break;
         }
         String* points = parseTemps(line);
@@ -458,6 +479,7 @@ void initData() {
         delete[] points;
         // Serial.println("points[0] = " + points[0] + ", points[1] = " + points[1]);
     }
+    Serial.printf("Parsed %d points!\n", pointCount);
     hotData.remove(hotData.length() - 1, 1);
     coldData.remove(coldData.length() - 1, 1);
     free(history);
@@ -472,18 +494,21 @@ void updateHTML() {
 
     initData();
 
-    // byte* history = readFileToByteArray(logFileName, MAX_BYTES_TO_READ);
-    // if (history == nullptr) {
-    //     Serial.println("History byte array is nullptr.");
-    //     return;
+    byte* history = readFileToByteArray(logFileName, MAX_BYTES_TO_READ);
+    if (history == nullptr) {
+        Serial.println("History byte array is nullptr.");
+    }
+    String historyStr = "";
+    // if (debug) {
+    //     Serial.println("Debug is on, printing history.");
+    //     historyStr = bytesToString(history);
     // }
-    // String historyStr = bytesToString(history);
-    // free(history);
-    // historyStr.replace("\n", "<br />\n");
+    free(history);
+    historyStr.replace("\n", "<br />\n");
 
     lastHTML = String(index_html);
     lastHTML = String("HTTP/1.1 200 OK\nContent-Type: text/html\n\n") + lastHTML;
-    lastHTML.replace("_HEAD_", R"===(<meta http-equiv="refresh" content="300" >)===");
+    lastHTML.replace("_HEAD_", R"===(<meta http-equiv="refresh" content="300">)===");
     lastHTML.replace("_IP_", WiFi.localIP().toString());
     lastHTML.replace("_LED-STATUS_", ledStatus == HIGH ? "Off" : "On");
     lastHTML.replace("_TIME_", getTime());
@@ -494,21 +519,25 @@ void updateHTML() {
                                         ? "BAD"
                                         : String(lastTemps[0] - lastTemps[1]));
 
-    // lastHTML.replace("_HISTORY_", historyStr);
-    lastHTML.replace("_HISTORY_", temperatureError
-                                      ? "<span style='color: red'>Error: last temperature measurement was bad.</span>"
-                                      : "");
+    historyStr = temperatureError
+                     ? "<span style='color: red'>Error: last temperature measurement was bad.</span><br />" + historyStr
+                     : historyStr;
+    if (debug) {
+        historyStr = "Position in file: " + String(position) + "<br />\n" + historyStr;
+    }
+    Serial.printf("\n~~~ HISTORY START ~~~\n%s\n~~~ HISTORY END ~~~\n", historyStr.c_str());
+    lastHTML.replace("_HISTORY_", historyStr);
     lastHTML.replace("_HOTDATA_", hotData);
     lastHTML.replace("_COLDDATA_", coldData);
 
-    lastHTML.replace("_LASTHOT_", String(lastTemps[0]));
-    lastHTML.replace("_LASTCOLD_", String(lastTemps[1]));
+    lastHTML.replace("_LASTHOT_", String(lastTempsGood[0]));
+    lastHTML.replace("_LASTCOLD_", String(lastTempsGood[1]));
 }
 
 void logTemps() {
     if (millis() - lastLoggedTime >= TIME_BETWEEN_MEASUREMENTS) {
         Serial.println("Logging Temps!");
-        if (lastTemps[0] == BAD_TEMP || lastTemps[1] == BAD_TEMP) {
+        if ((lastTemps[0] == BAD_TEMP || lastTemps[1] == BAD_TEMP) && !debug) {
             Serial.println("Last measurements were bad, will not record.");
             temperatureError = true;
             lastTimeTemps = millis() - TIME_BETWEEN_MEASUREMENTS + 60 * 1000; // wait a minute before retrying
@@ -606,6 +635,7 @@ void setup() {
     delay(200);
 
     position = getPosition();
+    Serial.printf("Position is: %d\n", position);
 
     Serial.println("\n~~~ Setup Finished! ~~~\n\n");
 }
@@ -618,12 +648,12 @@ void loop() {
     if (!client) {
         return;
     }
-    Serial.println("New client");
+    Serial.println("~~ New client");
     unsigned long available = millis();
     while (!client.available()) {
         delay(10);
         if (millis() - available > 1500) {
-            Serial.println("failed to connect.\n");
+            Serial.println("~~ failed to connect.\n");
             return;
         }
     }
@@ -636,6 +666,6 @@ void loop() {
     client.flush();
 
     delay(100);
-    Serial.println("Client disonnected");
+    Serial.println("~~ Client disonnected");
     Serial.println("");
 }
