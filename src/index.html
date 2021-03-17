@@ -18,9 +18,10 @@
         Led is: _LED-STATUS_<br />
         Time: _TIME_<br />
         DST: _DST_<br />
-        Temperature 1: _TEMP1_ &deg;C<br />
-        Temperature 2: _TEMP2_ &deg;C<br />
-        Temp1 - Temp2 = _TEMP-DIFF_ &deg;C<br /></p>
+        Temperature 1 (In Global): _TEMP1_ &deg;C<br />
+        Temperature 2 (In Local): _TEMP2_ &deg;C<br />
+        Temperature 3 (Out Local): _TEMP3_ &deg;C<br />
+    </p>
 
     <div id="chart">
         <canvas id="myChart" height="500"></canvas>
@@ -81,7 +82,8 @@
         /listfiles<br />
         /force<br />
         /format<br />
-        /debug<br />
+        /debugon<br />
+        /debugoff<br />
     </p>
     <p>
         _HISTORY_

@@ -280,6 +280,17 @@ void updateTemps() {
         lastTemps[i] = getTemp(sensorAdresses[i]);
     }
 
+    if (!debug) {
+        for (int i = 0; i < NUMBER_OF_SENSORS; i++) {
+            if (lastTemps[i] == BAD_TEMP) {
+                Serial.println("Last measurements were bad, will not record.");
+                temperatureError = true;
+                lastTimeMeasured = millis() - TIME_BETWEEN_MEASUREMENTS + 60 * 1000; // wait a minute before retrying
+                return;
+            }
+        }
+    }
+
     lastTimeMeasured = millis();
     tempsAreLogged = false;
 }
@@ -389,9 +400,17 @@ void handleRequest(String request) {
         return;
     }
 
-    if (request.indexOf("/debug") != -1) {
+    if (request.indexOf("/debugon") != -1) {
         Serial.printf("Debug was %s, ", debug ? "on" : "off");
-        debug = !debug;
+        debug = true;
+        Serial.printf("now it is %s.\n", debug ? "on" : "off");
+        forceUpdate();
+        return;
+    }
+
+    if (request.indexOf("/debugoff") != -1) {
+        Serial.printf("Debug was %s, ", debug ? "on" : "off");
+        debug = false;
         Serial.printf("now it is %s.\n", debug ? "on" : "off");
         forceUpdate();
         return;
@@ -432,7 +451,7 @@ String parseTemps(const byte* bytes, int sensor) {
 }
 
 void prepPoints(int sensor) {
-    Serial.println("Initializing points!");
+    Serial.printf("Starting to parse points for sensor %d... ", sensor);
     points = "";
     byte* history = readFileToByteArray(logFileName, MAX_BYTES_TO_READ);
     if (history == nullptr) {
@@ -440,7 +459,6 @@ void prepPoints(int sensor) {
         return;
     }
 
-    Serial.println("Starting to parse points!");
     int pointCount = 0;
     for (pointCount = position / TOTAL_LOG_LINE_SIZE;; pointCount++) {
         pointCount %= MAX_POINTS_ON_GRAPH;
@@ -454,10 +472,11 @@ void prepPoints(int sensor) {
         }
 
         if (allZero) {
-            break;
+            continue;
         }
 
         String point = parseTemps(line, sensor);
+        // Serial.printf("Point: %s\n", point.c_str());
         point.concat(",");
         points += point;
 
@@ -466,13 +485,15 @@ void prepPoints(int sensor) {
         }
         // Serial.println("points[0] = " + points[0] + ", points[1] = " + points[1]);
     }
-    Serial.printf("Parsed %d points!\n", pointCount);
+    Serial.printf("Parsed %d points.\n", pointCount);
     points.remove(points.length() - 1, 1);
     free(history);
+
+    // Serial.printf("Points: %s\n", points.c_str());
 }
 
 void updateHTML() {
-    if (htmlIsUpdated) {
+    if (htmlIsUpdated && !temperatureError) {
         return;
     }
     Serial.println("Updating HTML!");
@@ -491,28 +512,27 @@ void updateHTML() {
 
     lastHTML = String(index_html);
     lastHTML = String("HTTP/1.1 200 OK\nContent-Type: text/html\n\n") + lastHTML;
-    lastHTML.replace("_HEAD_", R"===(<meta http-equiv="refresh" content="900">)===");
+    lastHTML.replace("_HEAD_", R"===(<meta http-equiv="refresh" content="800">)===");
     lastHTML.replace("_IP_", WiFi.localIP().toString());
     lastHTML.replace("_LED-STATUS_", ledStatus == HIGH ? "Off" : "On");
     lastHTML.replace("_TIME_", getTime());
     lastHTML.replace("_DST_", dst == 1 ? "On" : "Off");
     lastHTML.replace("_TEMP1_", lastTemps[0] != BAD_TEMP ? String(lastTemps[0]) : "BAD");
     lastHTML.replace("_TEMP2_", lastTemps[1] != BAD_TEMP ? String(lastTemps[1]) : "BAD");
-    lastHTML.replace("_TEMP-DIFF_", lastTemps[1] == BAD_TEMP || lastTemps[1] == BAD_TEMP
-                                        ? "BAD"
-                                        : String(lastTemps[0] - lastTemps[1]));
+    lastHTML.replace("_TEMP3_", lastTemps[2] != BAD_TEMP ? String(lastTemps[2]) : "BAD");
 
     historyStr = temperatureError
                      ? "<span style='color: red'>Error: last temperature measurement was bad.</span><br />" + historyStr
                      : historyStr;
     if (debug) {
         historyStr = "Position in file: " + String(position) + "<br />\n" + historyStr;
+        Serial.printf("\n~~~ HISTORY START ~~~\n%s\n~~~ HISTORY END ~~~\n", historyStr.c_str());
     }
-    Serial.printf("\n~~~ HISTORY START ~~~\n%s\n~~~ HISTORY END ~~~\n", historyStr.c_str());
     lastHTML.replace("_HISTORY_", historyStr);
     prepPoints(0);
     lastHTML.replace("_INGDATA_", points);
-    lastHTML.replace("_OUTLDATA_", "");
+    prepPoints(2);
+    lastHTML.replace("_OUTLDATA_", points);
     prepPoints(1);
     lastHTML.replace("_INLDATA_", points);
 
@@ -525,12 +545,6 @@ void logTemps() {
     }
 
     Serial.println("Logging Temps!");
-    if ((lastTemps[0] == BAD_TEMP || lastTemps[1] == BAD_TEMP) && !debug) {
-        Serial.println("Last measurements were bad, will not record.");
-        temperatureError = true;
-        lastTimeMeasured = millis() - TIME_BETWEEN_MEASUREMENTS + 60 * 1000; // wait a minute before retrying
-        return;
-    }
     temperatureError = false;
     setDST();
     time_t* now = (time_t*)calloc(sizeof(time_t), 1);
@@ -538,8 +552,9 @@ void logTemps() {
     Serial.printf("Time: %ld\n", *now);
     byte* line = (byte*)malloc(TOTAL_LOG_LINE_SIZE);
     memcpy(line, now, TIMESTAMP_SIZE);
-    line[TOTAL_LOG_LINE_SIZE - TEMP_SIZE * 2] = lastTemps[0];
-    line[TOTAL_LOG_LINE_SIZE - TEMP_SIZE] = lastTemps[1];
+    for (int i = 0; i < NUMBER_OF_SENSORS; i++) {
+        line[TIMESTAMP_SIZE + TEMP_SIZE * i] = lastTemps[i];
+    }
     appendFileAtPosition(logFileName, line, TOTAL_LOG_LINE_SIZE, position);
     position += TOTAL_LOG_LINE_SIZE;
     position %= MAX_BYTES_TO_READ;

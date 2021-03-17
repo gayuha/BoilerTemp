@@ -3,7 +3,6 @@
 _HEAD_
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.9.3/Chart.bundle.min.js" integrity="sha256-TQq84xX6vkwR0Qs1qH5ADkP+MvH0W+9E7TdHJsoIQiM=" crossorigin="anonymous"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-annotation/0.5.7/chartjs-plugin-annotation.min.js" integrity="sha256-Olnajf3o9kfkFGloISwP1TslJiWUDd7IYmfC+GdCKd4=" crossorigin="anonymous"></script>
-<style>canvas{max-width:500px!important;max-height:500px!important}</style>
 <link rel='icon' href='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAS0lEQVR42s2SMQ4AIAjE+P+ncSYdasgNXMJgcyIIlVKPIKdvioAXyWBeJmVpqRZKWtj9QWAKZyWll50b8IcL9JUeQF50n28ckyb0ADG8RLwp05YBAAAAAElFTkSuQmCC' type='image/x-png' />
 </head>
 <body>
@@ -12,11 +11,12 @@ IP: _IP_<br />
 Led is: _LED-STATUS_<br />
 Time: _TIME_<br />
 DST: _DST_<br />
-Temperature 1: _TEMP1_ &deg;C<br />
-Temperature 2: _TEMP2_ &deg;C<br />
-Temp1 - Temp2 = _TEMP-DIFF_ &deg;C<br /></p>
+Temperature 1 (In Global): _TEMP1_ &deg;C<br />
+Temperature 2 (In Local): _TEMP2_ &deg;C<br />
+Temperature 3 (Out Local): _TEMP3_ &deg;C<br />
+</p>
 <div id="chart">
-<canvas id="myChart" width="400" height="400"></canvas>
+<canvas id="myChart" height="500"></canvas>
 <script>var ctx=document.getElementById("myChart").getContext("2d");var scatterChart=new Chart(ctx,{type:"line",data:{datasets:[{label:"Input Global",data:[_INGDATA_],borderColor:"red",fill:false},{label:"Output Local",data:[_OUTLDATA_],borderColor:"blue",fill:false},{label:"Input Local",data:[_INLDATA_],borderColor:"orange",fill:false}]},options:{responsive:true,maintainAspectRatio:false,scales:{xAxes:[{type:"time",display:true,scaleLabel:{display:true,labelString:"Date"},time:{displayFormats:{minute:"HH:mm"}}}],yAxes:[{position:"right"}]}}});</script>
 </div>
 <p>
@@ -29,7 +29,8 @@ Available commands:<br />
 /listfiles<br />
 /force<br />
 /format<br />
-/debug<br />
+/debugon<br />
+/debugoff<br />
 </p>
 <p>
 _HISTORY_
