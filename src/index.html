@@ -36,14 +36,19 @@
                 type: 'line',
                 data: {
                     datasets: [{
-                        label: 'Input',
-                        data: [_HOTDATA_],
+                        label: 'Input Global',
+                        data: [_INGDATA_],
                         borderColor: "red",
                         fill: false
                     }, {
-                        label: 'Output',
-                        data: [_COLDDATA_],
+                        label: 'Output Local',
+                        data: [_OUTLDATA_],
                         borderColor: "blue",
+                        fill: false
+                    }, {
+                        label: 'Input Local',
+                        data: [_INLDATA_],
+                        borderColor: "orange",
                         fill: false
                     }]
                 },
@@ -63,27 +68,10 @@
                                     minute: 'HH:mm'
                                 }
                             }
+                        }],
+                        yAxes: [{
+                            position: 'right'
                         }]
-                    },
-                    annotation: {
-                        annotations: [
-                            {
-                                type: "line",
-                                mode: "horizontal",
-                                scaleID: "y-axis-0",
-                                borderColor: "red",
-                                value: _LASTHOT_,
-                                borderWidth: 2
-                            },
-                            {
-                                type: "line",
-                                mode: "horizontal",
-                                scaleID: "y-axis-0",
-                                borderColor: "blue",
-                                value: _LASTCOLD_,
-                                borderWidth: 2
-                            }
-                        ]
                     }
                 }
             });
@@ -94,14 +82,12 @@
         /led<br />
         /led=on<br />
         /led=off<br />
-        /dst=on<br />
-        /dst=off<br />
         /cleanhistory<br />
         /getaddress<br />
-        /initdata<br />
         /listfiles<br />
         /force<br />
         /format<br />
+        /debug<br />
     </p>
     <p>
         _HISTORY_

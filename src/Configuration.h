@@ -6,12 +6,12 @@
 #define WIFI_PASSWORD2 "0523423456ygif"
 
 #define ONE_WIRE_BUS 2
-const DeviceAddress sensor1Address = {0x28, 0x23, 0xD0, 0x77, 0x91, 0x09, 0x02, 0x0C};
-const DeviceAddress sensor2Address = {0x28, 0x95, 0x1B, 0x77, 0x91, 0x04, 0x02, 0x62};
+#define NUMBER_OF_SENSORS 2
+const DeviceAddress sensorAdresses[NUMBER_OF_SENSORS] = {{0x28, 0x23, 0xD0, 0x77, 0x91, 0x09, 0x02, 0x0C},
+                                                         {0x28, 0x95, 0x1B, 0x77, 0x91, 0x04, 0x02, 0x62}};
 
 #define LED_PIN 2
 #define TIME_BETWEEN_MEASUREMENTS 15 * 60 * 1000 // in milliseconds
-#define TIME_BETWEEN_HTML_UPDATES 1 * 60 * 1000  // in milliseconds
 #define MAX_POINTS_ON_GRAPH 144                  // 15 minutes per point, 144 points, total of 36 hrs
 
 #define MAX_TEMP_MEASUREMENTS 10
