@@ -17,7 +17,10 @@ int ledStatus = LOW;
 
 const char* const logFileName = LOGFILE;
 const char* const positionFile = POSITION_FILE;
-time_t lastTimeLogged = millis();
+
+time_t lastTimeMeasured = millis() - TIME_BETWEEN_MEASUREMENTS;
+bool htmlIsUpdated = false;
+bool tempsAreLogged = false;
 
 OneWire oneWire(ONE_WIRE_BUS);
 DallasTemperature sensors(&oneWire);
@@ -27,10 +30,8 @@ int dst = 0;
 WiFiServer server(80);
 
 String lastHTML = "Yo!";
-time_t lastTimeHTML = millis() - TIME_BETWEEN_MEASUREMENTS;
 
 byte lastTemps[NUMBER_OF_SENSORS];
-time_t lastTimeMeasured = millis() - TIME_BETWEEN_MEASUREMENTS;
 
 String points = "";
 String bytesToString_out = "";
@@ -274,11 +275,13 @@ void updateTemps() {
     if (millis() - lastTimeMeasured < TIME_BETWEEN_MEASUREMENTS) {
         return;
     }
+
     for (int i = 0; i < NUMBER_OF_SENSORS; i++) {
         lastTemps[i] = getTemp(sensorAdresses[i]);
     }
 
     lastTimeMeasured = millis();
+    tempsAreLogged = false;
 }
 
 void toggleLED(bool on) {
@@ -321,8 +324,6 @@ void formatLittleFS() {
 }
 
 void forceUpdate() {
-    lastTimeLogged = millis() - TIME_BETWEEN_MEASUREMENTS - 1;
-    lastTimeHTML = millis() - TIME_BETWEEN_MEASUREMENTS - 1;
     lastTimeMeasured = millis() - TIME_BETWEEN_MEASUREMENTS - 1;
     updateTemps();
     logTemps();
@@ -471,10 +472,9 @@ void prepPoints(int sensor) {
 }
 
 void updateHTML() {
-    if (millis() - lastTimeHTML < TIME_BETWEEN_MEASUREMENTS) {
+    if (htmlIsUpdated) {
         return;
     }
-    lastTimeHTML = millis();
     Serial.println("Updating HTML!");
 
     byte* history = readFileToByteArray(logFileName, MAX_BYTES_TO_READ);
@@ -515,10 +515,12 @@ void updateHTML() {
     lastHTML.replace("_OUTLDATA_", "");
     prepPoints(1);
     lastHTML.replace("_INLDATA_", points);
+
+    htmlIsUpdated = true;
 }
 
 void logTemps() {
-    if (millis() - lastTimeLogged < TIME_BETWEEN_MEASUREMENTS) {
+    if (tempsAreLogged) {
         return;
     }
 
@@ -527,8 +529,6 @@ void logTemps() {
         Serial.println("Last measurements were bad, will not record.");
         temperatureError = true;
         lastTimeMeasured = millis() - TIME_BETWEEN_MEASUREMENTS + 60 * 1000; // wait a minute before retrying
-        lastTimeLogged = millis() - TIME_BETWEEN_MEASUREMENTS + 120 * 1000;
-        lastTimeHTML = millis() - TIME_BETWEEN_MEASUREMENTS + 120 * 1000;
         return;
     }
     temperatureError = false;
@@ -546,7 +546,9 @@ void logTemps() {
     savePosition(position);
     free(line);
     free(now);
-    lastTimeLogged = millis();
+
+    htmlIsUpdated = false;
+    tempsAreLogged = true;
 }
 
 void setup() {

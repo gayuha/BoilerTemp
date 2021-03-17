@@ -7,12 +7,6 @@
     <script
         src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-annotation/0.5.7/chartjs-plugin-annotation.min.js"
         integrity="sha256-Olnajf3o9kfkFGloISwP1TslJiWUDd7IYmfC+GdCKd4=" crossorigin="anonymous"></script>
-    <style>
-        canvas {
-            max-width: 500px !important;
-            max-height: 500px !important;
-        }
-    </style>
     <link rel='icon'
         href='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAS0lEQVR42s2SMQ4AIAjE+P+ncSYdasgNXMJgcyIIlVKPIKdvioAXyWBeJmVpqRZKWtj9QWAKZyWll50b8IcL9JUeQF50n28ckyb0ADG8RLwp05YBAAAAAElFTkSuQmCC'
         type='image/x-png' />
@@ -29,7 +23,7 @@
         Temp1 - Temp2 = _TEMP-DIFF_ &deg;C<br /></p>
 
     <div id="chart">
-        <canvas id="myChart" width="400" height="400"></canvas>
+        <canvas id="myChart" height="500"></canvas>
         <script>
             var ctx = document.getElementById('myChart').getContext('2d');
             var scatterChart = new Chart(ctx, {
