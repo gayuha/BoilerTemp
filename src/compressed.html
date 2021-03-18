@@ -11,13 +11,15 @@ IP: _IP_<br />
 Led is: _LED-STATUS_<br />
 Time: _TIME_<br />
 DST: _DST_<br />
-Temperature 1 (In Global): _TEMP1_ &deg;C<br />
-Temperature 2 (In Local): _TEMP2_ &deg;C<br />
-Temperature 3 (Out Local): _TEMP3_ &deg;C<br />
+<span style="color:red">Temperature 1 (Global In): _TEMP1_ &deg;C</span><br />
+<span style="color:orange">Temperature 2 (Local In) : _TEMP2_ &deg;C</span><br />
+<span style="color:blue"></span>Temperature 3 (Local Out): _TEMP3_ &deg;C</span><br />
+<span style="color:purple"></span>Temperature 2 - Temperature 3: _TEMP-DIFF_ &deg;C</span><br />
 </p>
 <div id="chart">
-<canvas id="myChart" height="500"></canvas>
-<script>var ctx=document.getElementById("myChart").getContext("2d");var scatterChart=new Chart(ctx,{type:"line",data:{datasets:[{label:"Input Global",data:[_INGDATA_],borderColor:"red",fill:false},{label:"Output Local",data:[_OUTLDATA_],borderColor:"blue",fill:false},{label:"Input Local",data:[_INLDATA_],borderColor:"orange",fill:false}]},options:{responsive:true,maintainAspectRatio:false,scales:{xAxes:[{type:"time",display:true,scaleLabel:{display:true,labelString:"Date"},time:{displayFormats:{minute:"HH:mm"}}}],yAxes:[{position:"right"}]}}});</script>
+<canvas id="temperatures" height="500"></canvas>
+<canvas id="diffs" height="500"></canvas>
+<script>var ctx_temps=document.getElementById("temperatures").getContext("2d");var ctx_diffs=document.getElementById("diffs").getContext("2d");var scatterChart1=new Chart(ctx_temps,{type:"line",data:{datasets:[{label:"Input Global",data:[_INGDATA_],borderColor:"red",fill:false},{label:"Output Local",data:[_OUTLDATA_],borderColor:"blue",fill:false},{label:"Input Local",data:[_INLDATA_],borderColor:"orange",fill:false}]},options:{responsive:true,maintainAspectRatio:false,scales:{xAxes:[{type:"time",display:true,scaleLabel:{display:true,labelString:"Date"},time:{displayFormats:{minute:"HH:mm"}}}],yAxes:[{position:"right"}]}}});var scatterChart2=new Chart(ctx_diffs,{type:"line",data:{datasets:[{label:"Local Diff",data:[_DIFFDATA_],borderColor:"purple",fill:false}]},options:{responsive:true,maintainAspectRatio:false,scales:{xAxes:[{type:"time",display:true,scaleLabel:{display:true,labelString:"Date"},time:{displayFormats:{minute:"HH:mm"}}}],yAxes:[{position:"right"}]}}});</script>
 </div>
 <p>
 Available commands:<br />

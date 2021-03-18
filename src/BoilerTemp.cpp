@@ -18,9 +18,10 @@ int ledStatus = LOW;
 const char* const logFileName = LOGFILE;
 const char* const positionFile = POSITION_FILE;
 
-time_t lastTimeMeasured = millis() - TIME_BETWEEN_MEASUREMENTS;
+unsigned long lastTimeMeasured = millis() - TIME_BETWEEN_MEASUREMENTS;
 bool htmlIsUpdated = false;
 bool tempsAreLogged = false;
+String lastMeasurementTimestamp;
 
 OneWire oneWire(ONE_WIRE_BUS);
 DallasTemperature sensors(&oneWire);
@@ -50,8 +51,8 @@ float getTemp(const DeviceAddress sensorAddress);
 void toggleLED(bool on);
 void toggleLED();
 void handleRequest(String request);
-const String getTime();
-void prepPoints(int sensor);
+const String getTime(time_t);
+void prepPoints(int sensor0, int sensor1);
 void logTemps();
 void updateHTML();
 
@@ -417,41 +418,60 @@ void handleRequest(String request) {
     }
 }
 
-const String getTime() {
-    const time_t now = time(nullptr);
+const String getTime(time_t timestamp) {
 
     char* charNow = (char*)malloc(50);
-    strftime(charNow, 50, "%d.%m.%Y, %A, %H:%M", localtime(&now));
+    strftime(charNow, 50, "%d.%m.%Y, %A, %H:%M", localtime(&timestamp));
     String strNow = String(charNow);
     free(charNow);
 
     return (strNow);
 }
 
-String parseTemps(const byte* bytes, int sensor) {
-    // Serial.println("Parsing line");
-    String timeStr;
+uint32_t parseTime(const byte* bytes) {
     uint32_t time = 0;
 
     // Assuming little endian
     for (size_t i = 0, mult = 1; i < TIMESTAMP_SIZE; i++, mult *= 256) {
         time += bytes[i] * mult;
-        // Serial.printf("Mult: %d\n", mult);
     }
     // Serial.printf("Time parsed: %d\n", time);
-    timeStr = String(time);
+    return time;
+}
 
-    String temperature = String(bytes[TIMESTAMP_SIZE + TEMP_SIZE * sensor]);
-
+String dataToPoint(uint32_t timestamp, byte temperature) {
     String point = "{";
-    point += "x:" + timeStr + "000,";
-    point += "y:" + temperature;
+    point += "x:";
+    point.concat(timestamp);
+    point += "000,";
+    point += "y:";
+    point.concat(temperature);
     point += "}";
     return point;
 }
 
-void prepPoints(int sensor) {
-    Serial.printf("Starting to parse points for sensor %d... ", sensor);
+String parseTemps(const byte* bytes, int sensor) {
+    // Serial.println("Parsing line");
+    uint32_t time = parseTime(bytes);
+
+    byte temperature = bytes[TIMESTAMP_SIZE + TEMP_SIZE * sensor];
+
+    return dataToPoint(time, temperature);
+}
+
+String parseDiffTemps(const byte* bytes, int sensor0, int sensor1) {
+    // Serial.println("Parsing line");
+    uint32_t time = parseTime(bytes);
+
+    byte temperature0 = bytes[TIMESTAMP_SIZE + TEMP_SIZE * sensor0];
+    byte temperature1 = bytes[TIMESTAMP_SIZE + TEMP_SIZE * sensor1];
+
+    return dataToPoint(time, temperature0 - temperature1);
+}
+
+// sensor0-sensor1
+void prepPoints(int sensor0, int sensor1) {
+    Serial.printf("Starting to create diff points for sensors %d and %d... ", sensor0, sensor1);
     points = "";
     byte* history = readFileToByteArray(logFileName, MAX_BYTES_TO_READ);
     if (history == nullptr) {
@@ -475,12 +495,19 @@ void prepPoints(int sensor) {
             continue;
         }
 
-        String point = parseTemps(line, sensor);
+        String point;
+        if (sensor1 < 0) {
+            point = parseTemps(line, sensor0);
+        } else {
+
+            point = parseDiffTemps(line, sensor0, sensor1);
+        }
         // Serial.printf("Point: %s\n", point.c_str());
         point.concat(",");
         points += point;
 
         if (pointCount == (position / TOTAL_LOG_LINE_SIZE - 1) % MAX_POINTS_ON_GRAPH) {
+            lastMeasurementTimestamp = getTime(parseTime(line));
             break;
         }
         // Serial.println("points[0] = " + points[0] + ", points[1] = " + points[1]);
@@ -512,14 +539,17 @@ void updateHTML() {
 
     lastHTML = String(index_html);
     lastHTML = String("HTTP/1.1 200 OK\nContent-Type: text/html\n\n") + lastHTML;
-    lastHTML.replace("_HEAD_", R"===(<meta http-equiv="refresh" content="800">)===");
+    lastHTML.replace("_HEAD_", R"===(<meta http-equiv="refresh" content="300">)===");
     lastHTML.replace("_IP_", WiFi.localIP().toString());
     lastHTML.replace("_LED-STATUS_", ledStatus == HIGH ? "Off" : "On");
-    lastHTML.replace("_TIME_", getTime());
+    lastHTML.replace("_TIME_", lastMeasurementTimestamp);
     lastHTML.replace("_DST_", dst == 1 ? "On" : "Off");
     lastHTML.replace("_TEMP1_", lastTemps[0] != BAD_TEMP ? String(lastTemps[0]) : "BAD");
     lastHTML.replace("_TEMP2_", lastTemps[1] != BAD_TEMP ? String(lastTemps[1]) : "BAD");
     lastHTML.replace("_TEMP3_", lastTemps[2] != BAD_TEMP ? String(lastTemps[2]) : "BAD");
+    lastHTML.replace("_TEMP-DIFF_", lastTemps[1] != BAD_TEMP && lastTemps[2] != BAD_TEMP
+                                        ? String(lastTemps[2] - lastTemps[1])
+                                        : "BAD");
 
     historyStr = temperatureError
                      ? "<span style='color: red'>Error: last temperature measurement was bad.</span><br />" + historyStr
@@ -529,12 +559,14 @@ void updateHTML() {
         Serial.printf("\n~~~ HISTORY START ~~~\n%s\n~~~ HISTORY END ~~~\n", historyStr.c_str());
     }
     lastHTML.replace("_HISTORY_", historyStr);
-    prepPoints(0);
+    prepPoints(0, -1);
     lastHTML.replace("_INGDATA_", points);
-    prepPoints(2);
+    prepPoints(2, -1);
     lastHTML.replace("_OUTLDATA_", points);
-    prepPoints(1);
+    prepPoints(1, -1);
     lastHTML.replace("_INLDATA_", points);
+    prepPoints(1, 2);
+    lastHTML.replace("_DIFFDATA_", points);
 
     htmlIsUpdated = true;
 }
@@ -562,6 +594,7 @@ void logTemps() {
     free(line);
     free(now);
 
+    lastMeasurementTimestamp = getTime(time(nullptr));
     htmlIsUpdated = false;
     tempsAreLogged = true;
 }
@@ -621,7 +654,7 @@ void setup() {
     }
     delay(500);
     Serial.print("\nGot Time. Current time is: ");
-    Serial.println(getTime());
+    Serial.println(getTime(time(nullptr)));
 
     if (!LittleFS.begin()) {
         Serial.println("LittleFS mount failed. Restarting...");
