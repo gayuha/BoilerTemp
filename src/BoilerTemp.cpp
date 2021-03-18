@@ -21,6 +21,7 @@ const char* const positionFile = POSITION_FILE;
 unsigned long lastTimeMeasured = millis() - TIME_BETWEEN_MEASUREMENTS;
 bool htmlIsUpdated = false;
 bool tempsAreLogged = false;
+bool historyIsUpdated = false;
 String lastMeasurementTimestamp;
 
 OneWire oneWire(ONE_WIRE_BUS);
@@ -36,6 +37,7 @@ byte lastTemps[NUMBER_OF_SENSORS];
 
 String points = "";
 String bytesToString_out = "";
+byte* history;
 
 int position;
 
@@ -439,7 +441,7 @@ uint32_t parseTime(const byte* bytes) {
     return time;
 }
 
-String dataToPoint(uint32_t timestamp, byte temperature) {
+String dataToPoint(uint32_t timestamp, int temperature) {
     String point = "{";
     point += "x:";
     point.concat(timestamp);
@@ -466,14 +468,25 @@ String parseDiffTemps(const byte* bytes, int sensor0, int sensor1) {
     byte temperature0 = bytes[TIMESTAMP_SIZE + TEMP_SIZE * sensor0];
     byte temperature1 = bytes[TIMESTAMP_SIZE + TEMP_SIZE * sensor1];
 
-    return dataToPoint(time, temperature0 - temperature1);
+    return dataToPoint(time, (int)temperature0 - (int)temperature1);
+}
+
+void updateHistory() {
+    if (!historyIsUpdated) {
+        Serial.print("History is old, updating...\n");
+        free(history);
+        history = readFileToByteArray(logFileName, MAX_BYTES_TO_READ);
+        historyIsUpdated = true;
+    } else {
+        Serial.print("History is okay, not updating.\n");
+    }
 }
 
 // sensor0-sensor1
 void prepPoints(int sensor0, int sensor1) {
     Serial.printf("Starting to create diff points for sensors %d and %d... ", sensor0, sensor1);
     points = "";
-    byte* history = readFileToByteArray(logFileName, MAX_BYTES_TO_READ);
+    updateHistory();
     if (history == nullptr) {
         Serial.println("History byte array is nullptr.");
         return;
@@ -499,12 +512,15 @@ void prepPoints(int sensor0, int sensor1) {
         if (sensor1 < 0) {
             point = parseTemps(line, sensor0);
         } else {
-
             point = parseDiffTemps(line, sensor0, sensor1);
         }
         // Serial.printf("Point: %s\n", point.c_str());
-        point.concat(",");
-        points += point;
+        if ((line[TIMESTAMP_SIZE + TEMP_SIZE * sensor0] != BAD_TEMP &&
+             line[TIMESTAMP_SIZE + TEMP_SIZE * sensor1] != BAD_TEMP) ||
+            debug) {
+            point.concat(",");
+            points += point;
+        }
 
         if (pointCount == (position / TOTAL_LOG_LINE_SIZE - 1) % MAX_POINTS_ON_GRAPH) {
             lastMeasurementTimestamp = getTime(parseTime(line));
@@ -514,7 +530,6 @@ void prepPoints(int sensor0, int sensor1) {
     }
     Serial.printf("Parsed %d points.\n", pointCount);
     points.remove(points.length() - 1, 1);
-    free(history);
 
     // Serial.printf("Points: %s\n", points.c_str());
 }
@@ -525,7 +540,7 @@ void updateHTML() {
     }
     Serial.println("Updating HTML!");
 
-    byte* history = readFileToByteArray(logFileName, MAX_BYTES_TO_READ);
+    updateHistory();
     if (history == nullptr) {
         Serial.println("History byte array is nullptr.");
     }
@@ -534,7 +549,6 @@ void updateHTML() {
     //     Serial.println("Debug is on, printing history.");
     //     historyStr = bytesToString(history);
     // }
-    free(history);
     historyStr.replace("\n", "<br />\n");
 
     lastHTML = String(index_html);
@@ -596,6 +610,7 @@ void logTemps() {
 
     lastMeasurementTimestamp = getTime(time(nullptr));
     htmlIsUpdated = false;
+    historyIsUpdated = false;
     tempsAreLogged = true;
 }
 

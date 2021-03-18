@@ -20,16 +20,14 @@
         DST: _DST_<br />
         <span style="color: red;">Temperature 1 (Global In): _TEMP1_ &deg;C</span><br />
         <span style="color: orange;">Temperature 2 (Local In) : _TEMP2_ &deg;C</span><br />
-        <span style="color: blue;"></span>Temperature 3 (Local Out): _TEMP3_ &deg;C</span><br />
-        <span style="color: purple;"></span>Temperature 2 - Temperature 3: _TEMP-DIFF_ &deg;C</span><br />
+        <span style="color: blue;">Temperature 3 (Local Out): _TEMP3_ &deg;C</span><br />
+        <span style="color: purple;">Temperature 2 - Temperature 3: _TEMP-DIFF_ &deg;C</span><br />
     </p>
 
     <div id="chart">
         <canvas id="temperatures" height="500"></canvas>
-        <canvas id="diffs" height="500"></canvas>
         <script>
             var ctx_temps = document.getElementById('temperatures').getContext('2d');
-            var ctx_diffs = document.getElementById('diffs').getContext('2d');
             var scatterChart1 = new Chart(ctx_temps, {
                 type: 'line',
                 data: {
@@ -73,6 +71,12 @@
                     }
                 }
             });
+        </script>
+    </div>
+    <div id="chart2">
+        <canvas id="diffs" height="500"></canvas>
+        <script>
+            var ctx_diffs = document.getElementById('diffs').getContext('2d');
 
             var scatterChart2 = new Chart(ctx_diffs, {
                 type: 'line',
