@@ -12,8 +12,8 @@ const DeviceAddress sensorAdresses[NUMBER_OF_SENSORS] = {{0x28, 0x23, 0xD0, 0x77
                                                          {0x28, 0x61, 0x64, 0x11, 0x8C, 0x7D, 0x7B, 0x6D}};
 
 #define LED_PIN 2
-#define TIME_BETWEEN_MEASUREMENTS 15 * 60 * 1000 // in milliseconds
-#define MAX_POINTS_ON_GRAPH 144                  // 15 minutes per point, 144 points, total of 36 hrs
+#define TIME_BETWEEN_MEASUREMENTS 10 * 60 * 1000 // in milliseconds
+#define MAX_POINTS_ON_GRAPH 216                  // 10 minutes per point, 216 points, total of 36 hrs
 
 #define MAX_TEMP_MEASUREMENTS 10
 #define DELAY_BETWEEN_MEASUREMENTS 100 // in milliseconds

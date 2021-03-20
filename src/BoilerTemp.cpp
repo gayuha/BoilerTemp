@@ -562,7 +562,7 @@ void updateHTML() {
     lastHTML.replace("_TEMP2_", lastTemps[1] != BAD_TEMP ? String(lastTemps[1]) : "BAD");
     lastHTML.replace("_TEMP3_", lastTemps[2] != BAD_TEMP ? String(lastTemps[2]) : "BAD");
     lastHTML.replace("_TEMP-DIFF_", lastTemps[1] != BAD_TEMP && lastTemps[2] != BAD_TEMP
-                                        ? String(lastTemps[2] - lastTemps[1])
+                                        ? String(lastTemps[1] - lastTemps[2])
                                         : "BAD");
 
     historyStr = temperatureError
