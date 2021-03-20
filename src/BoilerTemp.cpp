@@ -1,6 +1,7 @@
 #include <Arduino.h>
 
 #include <DallasTemperature.h>
+#include <Stepper.h>
 
 #include <ESP8266WiFi.h>
 #include <FS.h>
@@ -16,10 +17,17 @@
 int ledStatus = LOW;
 
 const char* const logFileName = LOGFILE;
-const char* const positionFile = POSITION_FILE;
+const char* const positionFileName = POSITION_FILE;
+const char* const valveFileName = VALVE_FILE;
 
 unsigned long lastTimeMeasured = millis() - TIME_BETWEEN_MEASUREMENTS;
-bool htmlIsUpdated = false;
+unsigned long lastTimeValveMoved = millis() - TIME_BETWEEN_VALVE_MOVEMENTS;
+time_t valveLastOpened = 0;
+time_t valveLastClosed = 0;
+
+// Valve status. Open means water can flow.
+bool valveIsOpen = true;
+
 bool tempsAreLogged = false;
 bool historyIsUpdated = false;
 String lastMeasurementTimestamp;
@@ -31,7 +39,7 @@ int dst = 0;
 
 WiFiServer server(80);
 
-String lastHTML = "Yo!";
+String lastHTMLBody = "Yo!";
 
 byte lastTemps[NUMBER_OF_SENSORS];
 
@@ -43,6 +51,8 @@ int position;
 
 bool temperatureError = false;
 bool debug = DEBUG;
+
+// Stepper stepper((STEPS * MICROSTEPPING), STEP_PIN, DIR_PIN);
 
 // Declarations
 void configureTime();
@@ -56,7 +66,6 @@ void handleRequest(String request);
 const String getTime(time_t);
 void prepPoints(int sensor0, int sensor1);
 void logTemps();
-void updateHTML();
 
 // Functions
 void setDST() {
@@ -74,6 +83,7 @@ void setDST() {
         configureTime();
     }
 }
+
 void configureTime() {
     configTime(TIMEZONE * 3600, dst * 3600, NTP_SERVER_1, NTP_SERVER_2);
     delay(500);
@@ -113,10 +123,10 @@ String& bytesToString(const byte* bytes, int count = MAX_BYTES_TO_READ) {
 }
 
 int getPosition() {
-    File file = LittleFS.open(positionFile, "r");
+    File file = LittleFS.open(positionFileName, "r");
     if (!file) {
         Serial.println("Failed to open position file for reading. Creating a new one.");
-        file = LittleFS.open(positionFile, "w");
+        file = LittleFS.open(positionFileName, "w");
         file.print("0");
         file.close();
         return 0;
@@ -198,6 +208,9 @@ void readFile(const char* path) {
     file.close();
 }
 
+/**
+ * Don't forget to free() the returned memory!!!
+ */
 byte* readFileToByteArray(const char* path, int length) {
     Serial.printf("Reading file: %s... ", path);
     byte* out = (byte*)calloc(length, sizeof(byte));
@@ -219,7 +232,7 @@ byte* readFileToByteArray(const char* path, int length) {
 }
 
 void savePosition(int pos) {
-    writeFile(positionFile, String(pos).c_str());
+    writeFile(positionFileName, String(pos).c_str());
 }
 
 void cleanHistory(String filename) {
@@ -274,6 +287,40 @@ float getTemp(const DeviceAddress sensorAddress) {
     return (totalTemp / goodTemps);
 }
 
+void controlValve() {
+    if (millis() - lastTimeValveMoved < TIME_BETWEEN_VALVE_MOVEMENTS) {
+        return;
+    }
+
+    if(lastTemps[0] == BAD_TEMP || lastTemps[1] == BAD_TEMP || lastTemps[2] == BAD_TEMP){
+        return;
+    }
+
+    time_t* now = (time_t*)calloc(sizeof(time_t), 1);
+    *now = time(nullptr);
+    byte* line = (byte*)malloc(TIMESTAMP_SIZE);
+    memcpy(line, now, TIMESTAMP_SIZE);
+
+    if (valveIsOpen) {
+        if (lastTemps[1] > lastTemps[0] + 2) {
+            // Our water is hotter than in the system. Should close.
+            valveLastClosed = *now;
+            appendFileAtPosition(valveFileName, line, TIMESTAMP_SIZE, TIMESTAMP_SIZE);
+            lastTimeValveMoved = millis();
+        }
+    } else { // closed
+        if (lastTemps[0] > lastTemps[1] + 2) {
+            // Water in the system is hotter than ours. Should open.
+            valveLastOpened = *now;
+            appendFileAtPosition(valveFileName, line, TIMESTAMP_SIZE, 0);
+            lastTimeValveMoved = millis();
+        }
+    }
+
+    free(now);
+    free(line);
+}
+
 void updateTemps() {
     if (millis() - lastTimeMeasured < TIME_BETWEEN_MEASUREMENTS) {
         return;
@@ -296,6 +343,8 @@ void updateTemps() {
 
     lastTimeMeasured = millis();
     tempsAreLogged = false;
+
+    controlValve();
 }
 
 void toggleLED(bool on) {
@@ -341,7 +390,6 @@ void forceUpdate() {
     lastTimeMeasured = millis() - TIME_BETWEEN_MEASUREMENTS - 1;
     updateTemps();
     logTemps();
-    updateHTML();
 }
 
 void handleRequest(String request) {
@@ -493,9 +541,9 @@ void prepPoints(int sensor0, int sensor1) {
     }
 
     int pointCount = 0;
-    for (pointCount = position / TOTAL_LOG_LINE_SIZE;; pointCount++) {
-        pointCount %= MAX_POINTS_ON_GRAPH;
-        byte* line = history + pointCount * TOTAL_LOG_LINE_SIZE;
+    for (int pointIndex = position / TOTAL_LOG_LINE_SIZE;; pointIndex++) {
+        pointIndex %= MAX_POINTS_ON_GRAPH;
+        byte* line = history + pointIndex * TOTAL_LOG_LINE_SIZE;
         bool allZero = true;
         for (int i = 0; i < TOTAL_LOG_LINE_SIZE; i++) {
             if (line[i] != 0) {
@@ -507,6 +555,7 @@ void prepPoints(int sensor0, int sensor1) {
         if (allZero) {
             continue;
         }
+        ++pointCount;
 
         String point;
         if (sensor1 < 0) {
@@ -522,7 +571,7 @@ void prepPoints(int sensor0, int sensor1) {
             points += point;
         }
 
-        if (pointCount == (position / TOTAL_LOG_LINE_SIZE - 1) % MAX_POINTS_ON_GRAPH) {
+        if (pointIndex == (position / TOTAL_LOG_LINE_SIZE - 1) % MAX_POINTS_ON_GRAPH) {
             lastMeasurementTimestamp = getTime(parseTime(line));
             break;
         }
@@ -534,55 +583,55 @@ void prepPoints(int sensor0, int sensor1) {
     // Serial.printf("Points: %s\n", points.c_str());
 }
 
-void updateHTML() {
-    if (htmlIsUpdated && !temperatureError) {
-        return;
-    }
-    Serial.println("Updating HTML!");
+void sendHTML(WiFiClient client) {
+    Serial.println("Sending HTML!");
+    client.print("HTTP/1.1 200 OK\nContent-Type: text/html\n\n");
 
-    updateHistory();
-    if (history == nullptr) {
-        Serial.println("History byte array is nullptr.");
-    }
-    String historyStr = "";
-    // if (debug) {
-    //     Serial.println("Debug is on, printing history.");
-    //     historyStr = bytesToString(history);
-    // }
-    historyStr.replace("\n", "<br />\n");
+    client.print("<html><script>");
 
-    lastHTML = String(index_html);
-    lastHTML = String("HTTP/1.1 200 OK\nContent-Type: text/html\n\n") + lastHTML;
-    lastHTML.replace("_HEAD_", R"===(<meta http-equiv="refresh" content="300">)===");
-    lastHTML.replace("_IP_", WiFi.localIP().toString());
-    lastHTML.replace("_LED-STATUS_", ledStatus == HIGH ? "Off" : "On");
-    lastHTML.replace("_TIME_", lastMeasurementTimestamp);
-    lastHTML.replace("_DST_", dst == 1 ? "On" : "Off");
-    lastHTML.replace("_TEMP1_", lastTemps[0] != BAD_TEMP ? String(lastTemps[0]) : "BAD");
-    lastHTML.replace("_TEMP2_", lastTemps[1] != BAD_TEMP ? String(lastTemps[1]) : "BAD");
-    lastHTML.replace("_TEMP3_", lastTemps[2] != BAD_TEMP ? String(lastTemps[2]) : "BAD");
-    lastHTML.replace("_TEMP-DIFF_", lastTemps[1] != BAD_TEMP && lastTemps[2] != BAD_TEMP
-                                        ? String(lastTemps[1] - lastTemps[2])
-                                        : "BAD");
-
-    historyStr = temperatureError
-                     ? "<span style='color: red'>Error: last temperature measurement was bad.</span><br />" + historyStr
-                     : historyStr;
-    if (debug) {
-        historyStr = "Position in file: " + String(position) + "<br />\n" + historyStr;
-        Serial.printf("\n~~~ HISTORY START ~~~\n%s\n~~~ HISTORY END ~~~\n", historyStr.c_str());
-    }
-    lastHTML.replace("_HISTORY_", historyStr);
     prepPoints(0, -1);
-    lastHTML.replace("_INGDATA_", points);
-    prepPoints(2, -1);
-    lastHTML.replace("_OUTLDATA_", points);
-    prepPoints(1, -1);
-    lastHTML.replace("_INLDATA_", points);
-    prepPoints(1, 2);
-    lastHTML.replace("_DIFFDATA_", points);
+    client.print("var _INGDATA_ = [");
+    client.print(points);
+    client.print("];\n");
 
-    htmlIsUpdated = true;
+    prepPoints(2, -1);
+    client.print("var _OUTLDATA_ = [");
+    client.print(points);
+    client.print("];\n");
+
+    prepPoints(1, -1);
+    client.print("var _INLDATA_ = [");
+    client.print(points);
+    client.print("];\n");
+
+    prepPoints(1, 2);
+    client.print("var _DIFFDATA_ = [");
+    client.print(points);
+    client.print("];\n");
+
+    client.print("</script>");
+
+    lastHTMLBody = String(index_html);
+    lastHTMLBody.replace("_IP_", WiFi.localIP().toString());
+    lastHTMLBody.replace("_LED-STATUS_", ledStatus == HIGH ? "Off" : "On");
+    lastHTMLBody.replace("_TIME_", lastMeasurementTimestamp);
+    lastHTMLBody.replace("_DST_", dst == 1 ? "On" : "Off");
+
+    lastHTMLBody.replace("_VALVESTATUS_", valveIsOpen ? "Open" : "Closed");
+    lastHTMLBody.replace("_VALVEOPENED_", getTime(valveLastOpened));
+    lastHTMLBody.replace("_VALVECLOSED_", getTime(valveLastClosed));
+
+    lastHTMLBody.replace("_TEMP1_", lastTemps[0] != BAD_TEMP ? String(lastTemps[0]) : "BAD");
+    lastHTMLBody.replace("_TEMP2_", lastTemps[1] != BAD_TEMP ? String(lastTemps[1]) : "BAD");
+    lastHTMLBody.replace("_TEMP3_", lastTemps[2] != BAD_TEMP ? String(lastTemps[2]) : "BAD");
+    lastHTMLBody.replace("_TEMP-DIFF_", lastTemps[1] != BAD_TEMP && lastTemps[2] != BAD_TEMP
+                                            ? String(lastTemps[1] - lastTemps[2])
+                                            : "BAD");
+
+    client.print(lastHTMLBody);
+    client.print("</html>");
+
+    client.flush();
 }
 
 void logTemps() {
@@ -609,14 +658,13 @@ void logTemps() {
     free(now);
 
     lastMeasurementTimestamp = getTime(time(nullptr));
-    htmlIsUpdated = false;
     historyIsUpdated = false;
     tempsAreLogged = true;
 }
 
 void setup() {
-    Serial.begin(115200);
-    delay(10);
+    Serial.begin(SERIAL_BAUDRATE);
+    delay(100);
 
     Serial.println("\n~~~ Setup Begin! ~~~\n\n");
 
@@ -649,9 +697,6 @@ void setup() {
 
     Serial.println("Starting temperature sensors!");
     sensors.begin();
-    Serial.printf("getWaitForConversion() = %d\n", sensors.getWaitForConversion());
-    Serial.printf("getCheckForConversion() = %d\n", sensors.getCheckForConversion());
-    Serial.printf("getResolution() = %d\n", sensors.getResolution());
     Serial.println("Configuring temperature sensors!");
     sensors.setWaitForConversion(true);
     sensors.setCheckForConversion(false);
@@ -681,6 +726,24 @@ void setup() {
     position = getPosition();
     Serial.printf("Position is: %d\n", position);
 
+    byte* valveBytes = readFileToByteArray(valveFileName, TIMESTAMP_SIZE * 2);
+    if (valveBytes != nullptr) {
+        valveLastOpened = parseTime(valveBytes);
+        valveLastClosed = parseTime(valveBytes + TIMESTAMP_SIZE);
+        free(valveBytes);
+    } else {
+        valveLastOpened = valveLastClosed = 0;
+        byte* line = (byte*)calloc(sizeof(byte), TIMESTAMP_SIZE * 2);
+        appendFileAtPosition(valveFileName, line, TIMESTAMP_SIZE * 2, 0);
+        free(line);
+    }
+
+    valveIsOpen = valveLastOpened >= valveLastClosed;
+
+    Serial.printf("Valve last opened on: %s\n", getTime(valveLastOpened).c_str());
+    Serial.printf("Valve last closed on: %s\n", getTime(valveLastClosed).c_str());
+    Serial.printf("Valve is currently %s.\n", valveIsOpen ? "Open" : "Closed");
+
     Serial.println("\n~~~ Setup Finished! ~~~\n\n");
 }
 
@@ -705,9 +768,7 @@ void loop() {
     Serial.println(request);
 
     handleRequest(request);
-    updateHTML();
-    client.print(lastHTML);
-    client.flush();
+    sendHTML(client);
 
     delay(100);
     Serial.println("~~ Client disonnected");

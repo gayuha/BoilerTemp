@@ -1,16 +1,11 @@
-<html>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.9.3/Chart.bundle.min.js"
+    integrity="sha256-TQq84xX6vkwR0Qs1qH5ADkP+MvH0W+9E7TdHJsoIQiM=" crossorigin="anonymous"></script>
 
-<head>
-    _HEAD_
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.9.3/Chart.bundle.min.js"
-        integrity="sha256-TQq84xX6vkwR0Qs1qH5ADkP+MvH0W+9E7TdHJsoIQiM=" crossorigin="anonymous"></script>
-    <script
-        src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-annotation/0.5.7/chartjs-plugin-annotation.min.js"
-        integrity="sha256-Olnajf3o9kfkFGloISwP1TslJiWUDd7IYmfC+GdCKd4=" crossorigin="anonymous"></script>
-    <link rel='icon'
-        href='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAS0lEQVR42s2SMQ4AIAjE+P+ncSYdasgNXMJgcyIIlVKPIKdvioAXyWBeJmVpqRZKWtj9QWAKZyWll50b8IcL9JUeQF50n28ckyb0ADG8RLwp05YBAAAAAElFTkSuQmCC'
-        type='image/x-png' />
-</head>
+<link rel='icon'
+    href='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAS0lEQVR42s2SMQ4AIAjE+P+ncSYdasgNXMJgcyIIlVKPIKdvioAXyWBeJmVpqRZKWtj9QWAKZyWll50b8IcL9JUeQF50n28ckyb0ADG8RLwp05YBAAAAAElFTkSuQmCC'
+    type='image/x-png' />
+
+<meta http-equiv="refresh" content="300">
 
 <body>
     <p>
@@ -18,6 +13,9 @@
         Led is: _LED-STATUS_<br />
         Time: _TIME_<br />
         DST: _DST_<br />
+        Valve is: _VALVESTATUS_<br />
+        Last Opened: _VALVEOPENED_<br />
+        Last Closed: _VALVECLOSED_<br />
         <span style="color: red;">Temperature 1 (Global In): _TEMP1_ &deg;C</span><br />
         <span style="color: orange;">Temperature 2 (Local In) : _TEMP2_ &deg;C</span><br />
         <span style="color: blue;">Temperature 3 (Local Out): _TEMP3_ &deg;C</span><br />
@@ -33,17 +31,17 @@
                 data: {
                     datasets: [{
                         label: 'Input Global',
-                        data: [_INGDATA_],
+                        data: _INGDATA_,
                         borderColor: "red",
                         fill: false
                     }, {
                         label: 'Output Local',
-                        data: [_OUTLDATA_],
+                        data: _OUTLDATA_,
                         borderColor: "blue",
                         fill: false
                     }, {
                         label: 'Input Local',
-                        data: [_INLDATA_],
+                        data: _INLDATA_,
                         borderColor: "orange",
                         fill: false
                     }]
@@ -83,7 +81,7 @@
                 data: {
                     datasets: [{
                         label: 'Local Diff',
-                        data: [_DIFFDATA_],
+                        data: _DIFFDATA_,
                         borderColor: "purple",
                         fill: false
                     }]
@@ -126,9 +124,4 @@
         /debugon<br />
         /debugoff<br />
     </p>
-    <p>
-        _HISTORY_
-    </p>
 </body>
-
-</html>
