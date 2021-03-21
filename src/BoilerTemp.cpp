@@ -46,6 +46,7 @@ byte lastTemps[NUMBER_OF_SENSORS];
 String points = "";
 String bytesToString_out = "";
 byte* history;
+String historyHex;
 
 int position;
 
@@ -66,6 +67,8 @@ void handleRequest(String request);
 const String getTime(time_t);
 void prepPoints(int sensor0, int sensor1);
 void logTemps();
+uint32_t parseTime(const byte* bytes);
+void updateHistory();
 
 // Functions
 void setDST() {
@@ -123,24 +126,22 @@ String& bytesToString(const byte* bytes, int count = MAX_BYTES_TO_READ) {
 }
 
 int getPosition() {
-    File file = LittleFS.open(positionFileName, "r");
-    if (!file) {
-        Serial.println("Failed to open position file for reading. Creating a new one.");
-        file = LittleFS.open(positionFileName, "w");
-        file.print("0");
-        file.close();
-        return 0;
-    }
+    updateHistory();
+    uint32_t latestTime = 0;
+    int latestPosition = 0;
+    // Serial.printf("Position: %d\n", position);
+    for (int pointIndex = 0; pointIndex < MAX_POINTS_ON_GRAPH; pointIndex++) {
+        // Serial.printf("pointIndex: %d\n", pointIndex);
+        byte* line = history + pointIndex * TOTAL_LOG_LINE_SIZE;
 
-    int pos = 0;
-    while (file.available()) {
-        int c = file.read();
-        if ('0' <= c && c <= '9') {
-            pos = pos * 10 + (c - '0');
+        uint32_t currentTime = parseTime(line);
+        if (currentTime > latestTime) {
+            latestTime = currentTime;
+            latestPosition = pointIndex * TOTAL_LOG_LINE_SIZE;
         }
+        // Serial.println("points[0] = " + points[0] + ", points[1] = " + points[1]);
     }
-    file.close();
-    return pos;
+    return (latestPosition + TOTAL_LOG_LINE_SIZE) % (TOTAL_LOG_LINE_SIZE * MAX_POINTS_ON_GRAPH);
 }
 
 void renameFile(const char* path1, const char* path2) {
@@ -231,10 +232,6 @@ byte* readFileToByteArray(const char* path, int length) {
     return out;
 }
 
-void savePosition(int pos) {
-    writeFile(positionFileName, String(pos).c_str());
-}
-
 void cleanHistory(String filename) {
     int i = 0;
     String newName;
@@ -242,7 +239,6 @@ void cleanHistory(String filename) {
         ;
     renameFile(filename.c_str(), newName.c_str());
     position = 0;
-    savePosition(position);
 }
 
 void listDir(const char* dirname) {
@@ -292,7 +288,7 @@ void controlValve() {
         return;
     }
 
-    if(lastTemps[0] == BAD_TEMP || lastTemps[1] == BAD_TEMP || lastTemps[2] == BAD_TEMP){
+    if (lastTemps[0] == BAD_TEMP || lastTemps[1] == BAD_TEMP || lastTemps[2] == BAD_TEMP) {
         return;
     }
 
@@ -306,12 +302,14 @@ void controlValve() {
             // Our water is hotter than in the system. Should close.
             valveLastClosed = *now;
             appendFileAtPosition(valveFileName, line, TIMESTAMP_SIZE, TIMESTAMP_SIZE);
+            valveIsOpen = false;
             lastTimeValveMoved = millis();
         }
     } else { // closed
         if (lastTemps[0] > lastTemps[1] + 2) {
             // Water in the system is hotter than ours. Should open.
             valveLastOpened = *now;
+            valveIsOpen = true;
             appendFileAtPosition(valveFileName, line, TIMESTAMP_SIZE, 0);
             lastTimeValveMoved = millis();
         }
@@ -383,7 +381,6 @@ void formatLittleFS() {
     Serial.println("Formatting LittleFS!");
     LittleFS.format();
     position = 0;
-    savePosition(position);
 }
 
 void forceUpdate() {
@@ -466,6 +463,18 @@ void handleRequest(String request) {
         forceUpdate();
         return;
     }
+
+    if (request.indexOf("/delete") != -1) {
+        Serial.print("Deleting last point\n");
+        position -= TOTAL_LOG_LINE_SIZE;
+        position += TOTAL_LOG_LINE_SIZE * MAX_POINTS_ON_GRAPH;
+        position %= TOTAL_LOG_LINE_SIZE * MAX_POINTS_ON_GRAPH;
+        byte* line = (byte*)calloc(sizeof(byte), TOTAL_LOG_LINE_SIZE);
+        appendFileAtPosition(logFileName, line, TOTAL_LOG_LINE_SIZE, position);
+        free(line);
+        historyIsUpdated = false;
+        return;
+    }
 }
 
 const String getTime(time_t timestamp) {
@@ -524,6 +533,25 @@ void updateHistory() {
         Serial.print("History is old, updating...\n");
         free(history);
         history = readFileToByteArray(logFileName, MAX_BYTES_TO_READ);
+        historyHex = "\"";
+        for (int i = 0; i < MAX_BYTES_TO_READ; i++) {
+            char msb = (char)((history[i] & 0b11110000) >> 4);
+            char lsb = (char)(history[i] & 0b00001111);
+            if (msb <= 9) {
+                msb += '0';
+            } else {
+                msb += 'A' - 10;
+            }
+            if (lsb <= 9) {
+                lsb += '0';
+            } else {
+                lsb += 'A' - 10;
+            }
+            historyHex += msb;
+            historyHex += lsb;
+        }
+        historyHex += "\"";
+
         historyIsUpdated = true;
     } else {
         Serial.print("History is okay, not updating.\n");
@@ -541,7 +569,11 @@ void prepPoints(int sensor0, int sensor1) {
     }
 
     int pointCount = 0;
+    // Serial.printf("Position: %d\n", position);
+    int lastPosition = (position / TOTAL_LOG_LINE_SIZE - 1 + MAX_BYTES_TO_READ) % MAX_POINTS_ON_GRAPH;
+    // Serial.printf("lastPosition: %d\n", lastPosition);
     for (int pointIndex = position / TOTAL_LOG_LINE_SIZE;; pointIndex++) {
+        // Serial.printf("pointIndex: %d\n", pointIndex);
         pointIndex %= MAX_POINTS_ON_GRAPH;
         byte* line = history + pointIndex * TOTAL_LOG_LINE_SIZE;
         bool allZero = true;
@@ -553,6 +585,9 @@ void prepPoints(int sensor0, int sensor1) {
         }
 
         if (allZero) {
+            if (pointIndex == lastPosition) {
+                break;
+            }
             continue;
         }
         ++pointCount;
@@ -571,7 +606,7 @@ void prepPoints(int sensor0, int sensor1) {
             points += point;
         }
 
-        if (pointIndex == (position / TOTAL_LOG_LINE_SIZE - 1) % MAX_POINTS_ON_GRAPH) {
+        if (pointIndex == lastPosition) {
             lastMeasurementTimestamp = getTime(parseTime(line));
             break;
         }
@@ -608,6 +643,11 @@ void sendHTML(WiFiClient client) {
     client.print("var _DIFFDATA_ = [");
     client.print(points);
     client.print("];\n");
+
+    updateHistory();
+    client.print("var _HISTORY_ = ");
+    client.print(historyHex);
+    client.print(";\n");
 
     client.print("</script>");
 
@@ -653,7 +693,6 @@ void logTemps() {
     appendFileAtPosition(logFileName, line, TOTAL_LOG_LINE_SIZE, position);
     position += TOTAL_LOG_LINE_SIZE;
     position %= MAX_BYTES_TO_READ;
-    savePosition(position);
     free(line);
     free(now);
 
