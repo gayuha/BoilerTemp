@@ -21,7 +21,7 @@ const char* const positionFileName = POSITION_FILE;
 const char* const valveFileName = VALVE_FILE;
 
 unsigned long lastTimeMeasured = millis() - TIME_BETWEEN_MEASUREMENTS;
-unsigned long lastTimeValveMoved = millis() - TIME_BETWEEN_VALVE_MOVEMENTS;
+unsigned long lastTimeValveMoved = millis() - TIME_BETWEEN_VALVE_MOVEMENTS + 10 * 60 * 1000;
 time_t valveLastOpened = 0;
 time_t valveLastClosed = 0;
 
@@ -127,6 +127,9 @@ String& bytesToString(const byte* bytes, int count = MAX_BYTES_TO_READ) {
 
 int getPosition() {
     updateHistory();
+    if (history == nullptr) {
+        return 0;
+    }
     uint32_t latestTime = 0;
     int latestPosition = 0;
     // Serial.printf("Position: %d\n", position);
@@ -283,6 +286,33 @@ float getTemp(const DeviceAddress sensorAddress) {
     return (totalTemp / goodTemps);
 }
 
+void step(bool dir, int count) {
+    digitalWrite(ENABLE_PIN, LOW);
+    switch (dir) {
+    case false:
+        digitalWrite(DIR_PIN, LOW);
+        break;
+    case true:
+        digitalWrite(DIR_PIN, HIGH);
+        break;
+    }
+    for (int i = 0; i < count; i++) {
+        digitalWrite(STEP_PIN, HIGH);
+        delay(MOTOR_DELAY_BETWEEN_STEPS);
+        digitalWrite(STEP_PIN, LOW);
+        delay(MOTOR_DELAY_BETWEEN_STEPS);
+    }
+    digitalWrite(ENABLE_PIN, HIGH);
+}
+
+void openValve() {
+    step(VALVE_OPEN_DIR, STEPS * MICROSTEPPING / 4);
+}
+
+void closeValve() {
+    step(!VALVE_OPEN_DIR, STEPS * MICROSTEPPING / 4);
+}
+
 void controlValve() {
     if (millis() - lastTimeValveMoved < TIME_BETWEEN_VALVE_MOVEMENTS) {
         return;
@@ -302,6 +332,7 @@ void controlValve() {
             // Our water is hotter than in the system. Should close.
             valveLastClosed = *now;
             appendFileAtPosition(valveFileName, line, TIMESTAMP_SIZE, TIMESTAMP_SIZE);
+            closeValve();
             valveIsOpen = false;
             lastTimeValveMoved = millis();
         }
@@ -311,6 +342,7 @@ void controlValve() {
             valveLastOpened = *now;
             valveIsOpen = true;
             appendFileAtPosition(valveFileName, line, TIMESTAMP_SIZE, 0);
+            openValve();
             lastTimeValveMoved = millis();
         }
     }
@@ -465,7 +497,7 @@ void handleRequest(String request) {
     }
 
     if (request.indexOf("/delete") != -1) {
-        Serial.print("Deleting last point\n");
+        Serial.print("Deleting last point.\n");
         position -= TOTAL_LOG_LINE_SIZE;
         position += TOTAL_LOG_LINE_SIZE * MAX_POINTS_ON_GRAPH;
         position %= TOTAL_LOG_LINE_SIZE * MAX_POINTS_ON_GRAPH;
@@ -473,6 +505,18 @@ void handleRequest(String request) {
         appendFileAtPosition(logFileName, line, TOTAL_LOG_LINE_SIZE, position);
         free(line);
         historyIsUpdated = false;
+        return;
+    }
+
+    if (request.indexOf("/openvalve") != -1) {
+        Serial.print("Opening valve.\n");
+        openValve();
+        return;
+    }
+
+    if (request.indexOf("/closevalve") != -1) {
+        Serial.print("Closing valve.\n");
+        closeValve();
         return;
     }
 }
@@ -533,7 +577,15 @@ void updateHistory() {
         Serial.print("History is old, updating...\n");
         free(history);
         history = readFileToByteArray(logFileName, MAX_BYTES_TO_READ);
+        historyIsUpdated = true;
+
+        if (history == nullptr) {
+            historyHex = "\"\"";
+            return;
+        }
+
         historyHex = "\"";
+
         for (int i = 0; i < MAX_BYTES_TO_READ; i++) {
             char msb = (char)((history[i] & 0b11110000) >> 4);
             char lsb = (char)(history[i] & 0b00001111);
@@ -551,8 +603,6 @@ void updateHistory() {
             historyHex += lsb;
         }
         historyHex += "\"";
-
-        historyIsUpdated = true;
     } else {
         Serial.print("History is okay, not updating.\n");
     }
@@ -651,7 +701,12 @@ void sendHTML(WiFiClient client) {
 
     client.print("</script>");
 
-    lastHTMLBody = String(index_html);
+    // refresh to the homepage
+    client.print(R"===(<meta http-equiv="refresh" content="300; URL=http://)===");
+    client.print(WiFi.localIP().toString());
+    client.print(R"===(/" />)===");
+
+    lastHTMLBody = String(compressed_html);
     lastHTMLBody.replace("_IP_", WiFi.localIP().toString());
     lastHTMLBody.replace("_LED-STATUS_", ledStatus == HIGH ? "Off" : "On");
     lastHTMLBody.replace("_TIME_", lastMeasurementTimestamp);
@@ -708,7 +763,11 @@ void setup() {
     Serial.println("\n~~~ Setup Begin! ~~~\n\n");
 
     pinMode(LED_PIN, OUTPUT);
+    pinMode(ENABLE_PIN, OUTPUT);
+    pinMode(STEP_PIN, OUTPUT);
+    pinMode(DIR_PIN, OUTPUT);
     digitalWrite(LED_PIN, LOW);
+    digitalWrite(ENABLE_PIN, HIGH);
     Serial.println();
     Serial.println();
     Serial.print("Connecting to ");

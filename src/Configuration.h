@@ -41,13 +41,16 @@ const DeviceAddress sensorAdresses[NUMBER_OF_SENSORS] = {{0x28, 0x23, 0xD0, 0x77
 #define NTP_SERVER_1 "pool.ntp.org"
 #define NTP_SERVER_2 "time.nist.gov"
 
-// #define STEP_PIN D0
-// #define DIR_PIN D3
-// #define ENABLE_PIN D6
+#define STEP_PIN D0
+#define DIR_PIN D3
+#define ENABLE_PIN D6
 
-// #define STEPS 200
-// #define MICROSTEPPING 1
-// #define motorInterfaceType 1
+#define STEPS 2000
+#define MICROSTEPPING 1
+
+#define VALVE_OPEN_DIR false
+
+#define MOTOR_DELAY_BETWEEN_STEPS 4 // in milliseconds
 
 #define DEBUG false
 
