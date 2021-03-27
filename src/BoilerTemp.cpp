@@ -17,7 +17,7 @@
 int ledStatus = LOW;
 
 const char* const logFileName = LOGFILE;
-const char* const positionFileName = POSITION_FILE;
+const char* const dstFileName = DST_FILE;
 const char* const valveFileName = VALVE_FILE;
 
 unsigned long lastTimeMeasured = millis() - TIME_BETWEEN_MEASUREMENTS;
@@ -28,7 +28,7 @@ time_t valveLastClosed = 0;
 // Valve status. Open means water can flow.
 bool valveIsOpen = true;
 
-bool tempsAreLogged = false;
+bool tempsAreLogged = true;
 bool historyIsUpdated = false;
 String lastMeasurementTimestamp;
 
@@ -69,6 +69,8 @@ void prepPoints(int sensor0, int sensor1);
 void logTemps();
 uint32_t parseTime(const byte* bytes);
 void updateHistory();
+byte* readFileToByteArray(const char* path, int length);
+void appendFileAtPosition(const char* path, const byte* message, size_t size, int pos);
 
 // Functions
 void setDST() {
@@ -76,15 +78,23 @@ void setDST() {
     while ((now = time(nullptr)) < 1000) {
         delay(200);
     }
-    bool newDST = isDST(now);
+    // bool newDST = isDST(now);
+    byte* dstByte = readFileToByteArray(dstFileName, 1);
+    if (dstByte == nullptr) {
+        dstByte = (byte*)malloc(1);
+        dstByte[0] = 0;
+    }
+    bool newDST = dstByte[0] & 1;
     bool isDiff = (dst != newDST);
     if (newDST < 0) { // dst is ambiguous
         return;
     }
     dst = newDST;
     if (isDiff) {
+        appendFileAtPosition(dstFileName, dstByte, 1, 0);
         configureTime();
     }
+    free(dstByte);
 }
 
 void configureTime() {
@@ -306,11 +316,11 @@ void step(bool dir, int count) {
 }
 
 void openValve() {
-    step(VALVE_OPEN_DIR, STEPS * MICROSTEPPING / 4);
+    step(VALVE_OPEN_DIR, STEPS * MICROSTEPPING / 4 * VALVE_PULLEY_RIDGES / MOTOR_PULLEY_RIDGES + 5);
 }
 
 void closeValve() {
-    step(!VALVE_OPEN_DIR, STEPS * MICROSTEPPING / 4);
+    step(!VALVE_OPEN_DIR, STEPS * MICROSTEPPING / 4 * VALVE_PULLEY_RIDGES / MOTOR_PULLEY_RIDGES + 5);
 }
 
 void controlValve() {
@@ -328,8 +338,8 @@ void controlValve() {
     memcpy(line, now, TIMESTAMP_SIZE);
 
     if (valveIsOpen) {
-        if (lastTemps[1] > lastTemps[0] + 2) {
-            // Our water is hotter than in the system. Should close.
+        if ((lastTemps[1] > lastTemps[0] + 2) || (lastTemps[0] < 40)) {
+            // Our water is hotter than in the system, or the system is just too cold. Should close.
             valveLastClosed = *now;
             appendFileAtPosition(valveFileName, line, TIMESTAMP_SIZE, TIMESTAMP_SIZE);
             closeValve();
@@ -517,6 +527,16 @@ void handleRequest(String request) {
     if (request.indexOf("/closevalve") != -1) {
         Serial.print("Closing valve.\n");
         closeValve();
+        return;
+    }
+
+    if (request.indexOf("/dst") != -1) {
+        Serial.print("Changing DST.\n");
+        byte* dstByte = (byte*)malloc(1);
+        dstByte[0] = !dst;
+        appendFileAtPosition(dstFileName, dstByte, 1, 0);
+        free(dstByte);
+        setDST();
         return;
     }
 }
@@ -803,6 +823,11 @@ void setup() {
     Serial.printf("getCheckForConversion() = %d\n", sensors.getCheckForConversion());
     Serial.printf("getResolution() = %d\n", sensors.getResolution());
 
+    if (!LittleFS.begin()) {
+        Serial.println("LittleFS mount failed. Restarting...");
+        ESP.restart();
+    }
+
     configureTime();
     delay(500);
     Serial.print("\nWaiting for time...");
@@ -813,11 +838,6 @@ void setup() {
     delay(500);
     Serial.print("\nGot Time. Current time is: ");
     Serial.println(getTime(time(nullptr)));
-
-    if (!LittleFS.begin()) {
-        Serial.println("LittleFS mount failed. Restarting...");
-        ESP.restart();
-    }
 
     delay(200);
 

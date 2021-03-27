@@ -5,7 +5,7 @@
 #define SSID2 "Irisha"
 #define WIFI_PASSWORD2 "0523423456ygif"
 
-#define ONE_WIRE_BUS 2
+#define ONE_WIRE_BUS D4
 #define NUMBER_OF_SENSORS 3
 const DeviceAddress sensorAdresses[NUMBER_OF_SENSORS] = {{0x28, 0x23, 0xD0, 0x77, 0x91, 0x09, 0x02, 0x0C},
                                                          {0x28, 0x95, 0x1B, 0x77, 0x91, 0x04, 0x02, 0x62},
@@ -14,7 +14,7 @@ const DeviceAddress sensorAdresses[NUMBER_OF_SENSORS] = {{0x28, 0x23, 0xD0, 0x77
 #define LED_PIN 2 // Should put an led. built-in interferes with serial
 // #define TIME_BETWEEN_MEASUREMENTS 10 * 1000 // in milliseconds
 #define TIME_BETWEEN_MEASUREMENTS 10 * 60 * 1000    // in milliseconds
-#define TIME_BETWEEN_VALVE_MOVEMENTS 30 * 60 * 1000 // in milliseconds
+#define TIME_BETWEEN_VALVE_MOVEMENTS 60 * 60 * 1000 // in milliseconds
 #define MAX_POINTS_ON_GRAPH 216                     // 10 minutes per point, 216 points, total of 36 hrs
 
 #define MAX_TEMP_MEASUREMENTS 10
@@ -29,8 +29,8 @@ const DeviceAddress sensorAdresses[NUMBER_OF_SENSORS] = {{0x28, 0x23, 0xD0, 0x77
 #define BAD_TEMP 157
 
 #define LOGFILE "temp.log"
-#define POSITION_FILE "position.log"
 #define VALVE_FILE "valve.log"
+#define DST_FILE "dst"
 
 #define IP 10, 100, 102, 50
 #define GATEWAY 10, 100, 102, 1
@@ -41,16 +41,18 @@ const DeviceAddress sensorAdresses[NUMBER_OF_SENSORS] = {{0x28, 0x23, 0xD0, 0x77
 #define NTP_SERVER_1 "pool.ntp.org"
 #define NTP_SERVER_2 "time.nist.gov"
 
-#define STEP_PIN D0
-#define DIR_PIN D3
-#define ENABLE_PIN D6
+#define STEP_PIN D6
+#define DIR_PIN D5
+#define ENABLE_PIN D7
 
 #define STEPS 2000
 #define MICROSTEPPING 1
 
-#define VALVE_OPEN_DIR false
+#define VALVE_OPEN_DIR true
 
 #define MOTOR_DELAY_BETWEEN_STEPS 4 // in milliseconds
+#define MOTOR_PULLEY_RIDGES 15
+#define VALVE_PULLEY_RIDGES 280
 
 #define DEBUG false
 
