@@ -51,7 +51,7 @@ const DeviceAddress sensorAdresses[NUMBER_OF_SENSORS] = {{0x28, 0x23, 0xD0, 0x77
 #define VALVE_OPEN_DIR true
 
 #define MOTOR_DELAY_BETWEEN_STEPS 4 // in milliseconds
-#define MOTOR_PULLEY_RIDGES 15
+#define MOTOR_PULLEY_RIDGES 20
 #define VALVE_PULLEY_RIDGES 280
 
 #define DEBUG false

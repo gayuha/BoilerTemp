@@ -338,8 +338,12 @@ void controlValve() {
     memcpy(line, now, TIMESTAMP_SIZE);
 
     if (valveIsOpen) {
-        if ((lastTemps[1] > lastTemps[0] + 2) || (lastTemps[0] < 40)) {
-            // Our water is hotter than in the system, or the system is just too cold. Should close.
+        if ((lastTemps[1] - lastTemps[0] >= 2) || ((abs(lastTemps[1] - lastTemps[0]) <= 2) && lastTemps[0] < 42) ||
+            (lastTemps[1] <= lastTemps[2] + 2)) {
+            // Our water is hotter than in the system, or
+            // the system is too cold, or
+            // water going out of the boiler is hotter than what enters.
+            // Should close.
             valveLastClosed = *now;
             appendFileAtPosition(valveFileName, line, TIMESTAMP_SIZE, TIMESTAMP_SIZE);
             closeValve();
@@ -347,7 +351,7 @@ void controlValve() {
             lastTimeValveMoved = millis();
         }
     } else { // closed
-        if (lastTemps[0] > lastTemps[1] + 2) {
+        if (lastTemps[0] >= lastTemps[1] + 2) {
             // Water in the system is hotter than ours. Should open.
             valveLastOpened = *now;
             valveIsOpen = true;
@@ -735,6 +739,12 @@ void sendHTML(WiFiClient client) {
     lastHTMLBody.replace("_VALVESTATUS_", valveIsOpen ? "Open" : "Closed");
     lastHTMLBody.replace("_VALVEOPENED_", getTime(valveLastOpened));
     lastHTMLBody.replace("_VALVECLOSED_", getTime(valveLastClosed));
+
+    // Place vertical lines on valve movements, or a placeholder to bug them out of showing.
+    lastHTMLBody.replace("_VALVEOPENEDTIMESTAMP_",
+                         valveLastOpened > 0 ? String(valveLastOpened) + "000" : "\"NO DATE\"");
+    lastHTMLBody.replace("_VALVECLOSEDTIMESTAMP_",
+                         valveLastClosed > 0 ? String(valveLastClosed) + "000" : "\"NO DATE\"");
 
     lastHTMLBody.replace("_TEMP1_", lastTemps[0] != BAD_TEMP ? String(lastTemps[0]) : "BAD");
     lastHTMLBody.replace("_TEMP2_", lastTemps[1] != BAD_TEMP ? String(lastTemps[1]) : "BAD");

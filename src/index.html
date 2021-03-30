@@ -1,5 +1,9 @@
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.9.3/Chart.bundle.min.js"
-    integrity="sha256-TQq84xX6vkwR0Qs1qH5ADkP+MvH0W+9E7TdHJsoIQiM=" crossorigin="anonymous"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.9.4/Chart.bundle.min.js"
+    integrity="sha512-SuxO9djzjML6b9w9/I07IWnLnQhgyYVSpHZx0JV97kGBfTIsUYlWflyuW4ypnvhBrslz1yJ3R+S14fdCWmSmSA=="
+    crossorigin="anonymous"></script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-annotation/0.5.7/chartjs-plugin-annotation.min.js"
+    integrity="sha256-Olnajf3o9kfkFGloISwP1TslJiWUDd7IYmfC+GdCKd4=" crossorigin="anonymous"></script>
 
 <link rel='icon'
     href='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAS0lEQVR42s2SMQ4AIAjE+P+ncSYdasgNXMJgcyIIlVKPIKdvioAXyWBeJmVpqRZKWtj9QWAKZyWll50b8IcL9JUeQF50n28ckyb0ADG8RLwp05YBAAAAAElFTkSuQmCC'
@@ -64,6 +68,34 @@
                         yAxes: [{
                             position: 'right'
                         }]
+                    },
+                    annotation: {
+                        annotations: [
+                            {
+                                type: "line",
+                                mode: "vertical",
+                                scaleID: "x-axis-0",
+                                value: _VALVEOPENEDTIMESTAMP_,
+                                borderColor: "red",
+                                label: {
+                                    content: "Opened Valve",
+                                    enabled: true,
+                                    position: "top"
+                                }
+                            },
+                            {
+                                type: "line",
+                                mode: "vertical",
+                                scaleID: "x-axis-0",
+                                value: _VALVECLOSEDTIMESTAMP_,
+                                borderColor: "blue",
+                                label: {
+                                    content: "Closed Valve",
+                                    enabled: true,
+                                    position: "top"
+                                }
+                            }
+                        ]
                     }
                 }
             });
