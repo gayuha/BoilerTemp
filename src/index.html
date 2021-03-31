@@ -1,3 +1,37 @@
+<script>
+    var annotationsOpen = _VALVEOPENINGS_.map(function (timestamp, index) {
+        return {
+            type: "line",
+            mode: "vertical",
+            scaleID: "x-axis-0",
+            value: timestamp,
+            borderColor: "red",
+            label: {
+                content: "Opened",
+                enabled: true,
+                position: "top"
+            }
+        }
+    });
+
+    var annotationsClose = _VALVECLOSINGS_.map(function (timestamp, index) {
+        return {
+            type: "line",
+            mode: "vertical",
+            scaleID: "x-axis-0",
+            value: timestamp,
+            borderColor: "blue",
+            label: {
+                content: "Closed",
+                enabled: true,
+                position: "top"
+            }
+        }
+    });
+
+    var annotations = annotationsOpen.concat(annotationsClose);
+</script>
+
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.9.4/Chart.bundle.min.js"
     integrity="sha512-SuxO9djzjML6b9w9/I07IWnLnQhgyYVSpHZx0JV97kGBfTIsUYlWflyuW4ypnvhBrslz1yJ3R+S14fdCWmSmSA=="
     crossorigin="anonymous"></script>
@@ -70,32 +104,7 @@
                         }]
                     },
                     annotation: {
-                        annotations: [
-                            {
-                                type: "line",
-                                mode: "vertical",
-                                scaleID: "x-axis-0",
-                                value: _VALVEOPENEDTIMESTAMP_,
-                                borderColor: "red",
-                                label: {
-                                    content: "Opened Valve",
-                                    enabled: true,
-                                    position: "top"
-                                }
-                            },
-                            {
-                                type: "line",
-                                mode: "vertical",
-                                scaleID: "x-axis-0",
-                                value: _VALVECLOSEDTIMESTAMP_,
-                                borderColor: "blue",
-                                label: {
-                                    content: "Closed Valve",
-                                    enabled: true,
-                                    position: "top"
-                                }
-                            }
-                        ]
+                        annotations: annotations
                     }
                 }
             });

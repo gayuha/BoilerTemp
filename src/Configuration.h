@@ -16,6 +16,8 @@ const DeviceAddress sensorAdresses[NUMBER_OF_SENSORS] = {{0x28, 0x23, 0xD0, 0x77
 #define TIME_BETWEEN_MEASUREMENTS 10 * 60 * 1000    // in milliseconds
 #define TIME_BETWEEN_VALVE_MOVEMENTS 60 * 60 * 1000 // in milliseconds
 #define MAX_POINTS_ON_GRAPH 216                     // 10 minutes per point, 216 points, total of 36 hrs
+// #define MAX_VALVES_ON_GRAPH ((TIME_BETWEEN_MEASUREMENTS / TIME_BETWEEN_VALVE_MOVEMENTS) * MAX_POINTS_ON_GRAPH)
+#define MAX_VALVES_ON_GRAPH 36
 
 #define MAX_TEMP_MEASUREMENTS 10
 #define DELAY_BETWEEN_MEASUREMENTS 100 // in milliseconds
@@ -24,12 +26,14 @@ const DeviceAddress sensorAdresses[NUMBER_OF_SENSORS] = {{0x28, 0x23, 0xD0, 0x77
 #define TIMESTAMP_SIZE 4
 #define TEMP_SIZE 1
 #define TOTAL_LOG_LINE_SIZE (TIMESTAMP_SIZE + TEMP_SIZE * NUMBER_OF_SENSORS)
-#define MAX_BYTES_TO_READ (TOTAL_LOG_LINE_SIZE * MAX_POINTS_ON_GRAPH)
+#define MAX_TEMP_BYTES_TO_READ (TOTAL_LOG_LINE_SIZE * MAX_POINTS_ON_GRAPH)
+#define MAX_VALVE_BYTES_TO_READ (TIMESTAMP_SIZE * MAX_VALVES_ON_GRAPH)
 
 #define BAD_TEMP 157
 
 #define LOGFILE "temp.log"
-#define VALVE_FILE "valve.log"
+#define VALVE_OPEN_FILE "valveopen.bin"
+#define VALVE_CLOSE_FILE "valveclose.bin"
 #define DST_FILE "dst"
 
 #define IP 10, 100, 102, 50
@@ -57,3 +61,6 @@ const DeviceAddress sensorAdresses[NUMBER_OF_SENSORS] = {{0x28, 0x23, 0xD0, 0x77
 #define DEBUG false
 
 #define SERIAL_BAUDRATE 115200
+
+#define VALVE_OPEN true
+#define VALVE_CLOSE false
