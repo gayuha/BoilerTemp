@@ -1,4 +1,4 @@
-<script>var annotationsOpen=_VALVEOPENINGS_.map(function(b,a){return{type:"line",mode:"vertical",scaleID:"x-axis-0",value:b,borderColor:"red",label:{content:"Opened",enabled:true,position:"top"}}});var annotationsClose=_VALVECLOSINGS_.map(function(b,a){return{type:"line",mode:"vertical",scaleID:"x-axis-0",value:b,borderColor:"blue",label:{content:"Closed",enabled:true,position:"top"}}});var annotations=annotationsOpen.concat(annotationsClose);</script>
+<script>const LINE_SIZE=TIMESTAMP_SIZE+SENSOR_COUNT;function hexStringToByte(e){if(!e){return new Uint8Array()}var c=[];for(var d=0,b=e.length;d<b;d+=2){c.push(parseInt(e.substr(d,2),16))}return new Uint8Array(c)}const historyBytes=hexStringToByte(_HISTORY_);const POINTS_COUNT=historyBytes.length/LINE_SIZE;function parseTime(a){let time=0;for(let i=0,mult=1;i<TIMESTAMP_SIZE;i++,mult*=256){time+=historyBytes[a+i]*mult}return time}function parseTemps(a){let temps=[];for(let i=0;i<SENSOR_COUNT;i++){temps.push(historyBytes[a+TIMESTAMP_SIZE+i])}return temps}let historyClean=[];for(let i=0;i<POINTS_COUNT;i++){const line_start=i*LINE_SIZE;const time=parseTime(line_start);const temps=parseTemps(line_start);if(time==0){continue}let bad=false;for(let j=0;j<temps.length;j++){if(temps[j]==157){bad=true;break}}if(bad){continue}let point={time:time*1000,temps:temps};historyClean.push(point)}function comparePoints(d,c){if(d.time<c.time){return -1}return d.time>c.time?1:0}historyClean.sort(comparePoints);var GLOBAL_DATA=[];var INSIDE_DATA=[];var TOP_DATA=[];for(let i=0;i<historyClean.length;i++){GLOBAL_DATA.push({x:historyClean[i].time,y:historyClean[i].temps[0]});INSIDE_DATA.push({x:historyClean[i].time,y:historyClean[i].temps[1]});TOP_DATA.push({x:historyClean[i].time,y:historyClean[i].temps[2]})}const annotationsOpen=_VALVEOPENINGS_.map(function(b,a){return{type:"line",mode:"vertical",scaleID:"x-axis-0",value:b,borderColor:"red",label:{content:"Opened",enabled:true,position:"top"}}});const annotationsClose=_VALVECLOSINGS_.map(function(b,a){return{type:"line",mode:"vertical",scaleID:"x-axis-0",value:b,borderColor:"blue",label:{content:"Closed",enabled:true,position:"top"}}});const annotations=annotationsOpen.concat(annotationsClose);</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.9.4/Chart.bundle.min.js" integrity="sha512-SuxO9djzjML6b9w9/I07IWnLnQhgyYVSpHZx0JV97kGBfTIsUYlWflyuW4ypnvhBrslz1yJ3R+S14fdCWmSmSA==" crossorigin="anonymous"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-annotation/0.5.7/chartjs-plugin-annotation.min.js" integrity="sha256-Olnajf3o9kfkFGloISwP1TslJiWUDd7IYmfC+GdCKd4=" crossorigin="anonymous"></script>
 <link rel='icon' href='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAS0lEQVR42s2SMQ4AIAjE+P+ncSYdasgNXMJgcyIIlVKPIKdvioAXyWBeJmVpqRZKWtj9QWAKZyWll50b8IcL9JUeQF50n28ckyb0ADG8RLwp05YBAAAAAElFTkSuQmCC' type='image/x-png' />
@@ -8,35 +8,19 @@ IP: _IP_<br />
 Led is: _LED-STATUS_<br />
 Time: _TIME_<br />
 DST: _DST_<br />
+<br />
 Valve is: _VALVESTATUS_<br />
 Last Opened: _VALVEOPENED_<br />
 Last Closed: _VALVECLOSED_<br />
-<span style="color:red">Temperature 1 (Global In): _TEMP1_ &deg;C</span><br />
-<span style="color:orange">Temperature 2 (Local In) : _TEMP2_ &deg;C</span><br />
-<span style="color:blue">Temperature 3 (Local Out): _TEMP3_ &deg;C</span><br />
-<span style="color:purple">Temperature 2 - Temperature 3: _TEMP-DIFF_ &deg;C</span><br />
+<br />
+<span style="color:red">Temperature 1 (Global): _TEMP1_ &deg;C, Quality: _TEMP1Q_%</span><br />
+<span style="color:orange">Temperature 2 (Inside): _TEMP2_ &deg;C, Quality: _TEMP2Q_%</span><br />
+<span style="color:purple">Temperature 3 (Top): _TEMP3_ &deg;C, Quality: _TEMP3Q_%</span><br />
+<br />
+Valve will close when below: _TEMPCUTOFF_&deg;C<br />
 </p>
 <div id="chart">
 <canvas id="temperatures" height="500"></canvas>
-<script>var ctx_temps=document.getElementById("temperatures").getContext("2d");var scatterChart1=new Chart(ctx_temps,{type:"line",data:{datasets:[{label:"Input Global",data:_INGDATA_,borderColor:"red",fill:false},{label:"Output Local",data:_OUTLDATA_,borderColor:"blue",fill:false},{label:"Input Local",data:_INLDATA_,borderColor:"orange",fill:false}]},options:{responsive:true,maintainAspectRatio:false,scales:{xAxes:[{type:"time",display:true,scaleLabel:{display:true,labelString:"Date"},time:{displayFormats:{minute:"HH:mm"}}}],yAxes:[{position:"right"}]},annotation:{annotations:annotations}}});</script>
+<script>var ctx_temps=document.getElementById("temperatures").getContext("2d");var scatterChart1=new Chart(ctx_temps,{type:"line",data:{datasets:[{label:"Global",data:GLOBAL_DATA,borderColor:"red",fill:false},{label:"Inside",data:INSIDE_DATA,borderColor:"orange",fill:false},{label:"Top",data:TOP_DATA,borderColor:"purple",fill:false}]},options:{responsive:true,maintainAspectRatio:false,scales:{xAxes:[{type:"time",display:true,scaleLabel:{display:true,labelString:"Date"},time:{displayFormats:{minute:"HH:mm"}}}],yAxes:[{position:"right"}]},annotation:{annotations:annotations}}});</script>
 </div>
-<div id="chart2">
-<canvas id="diffs" height="500"></canvas>
-<script>var ctx_diffs=document.getElementById("diffs").getContext("2d");var scatterChart2=new Chart(ctx_diffs,{type:"line",data:{datasets:[{label:"Local Diff",data:_DIFFDATA_,borderColor:"purple",fill:false}]},options:{responsive:true,maintainAspectRatio:false,scales:{xAxes:[{type:"time",display:true,scaleLabel:{display:true,labelString:"Date"},time:{displayFormats:{minute:"HH:mm"}}}],yAxes:[{position:"right"}]}}});</script>
-</div>
-<p>
-Available commands:<br />
-/led<br />
-/led=on<br />
-/led=off<br />
-/cleanhistory<br />
-/getaddress<br />
-/listfiles<br />
-/force<br />
-/format<br />
-/debugon<br />
-/debugoff<br />
-/openvalve<br />
-/closevalve<br />
-</p>
 </body>

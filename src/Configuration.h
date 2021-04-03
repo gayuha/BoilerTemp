@@ -8,20 +8,21 @@
 #define ONE_WIRE_BUS D4
 #define NUMBER_OF_SENSORS 3
 const DeviceAddress sensorAdresses[NUMBER_OF_SENSORS] = {{0x28, 0x23, 0xD0, 0x77, 0x91, 0x09, 0x02, 0x0C},
-                                                         {0x28, 0x95, 0x1B, 0x77, 0x91, 0x04, 0x02, 0x62},
-                                                         {0x28, 0x61, 0x64, 0x11, 0x8C, 0x7D, 0x7B, 0x6D}};
+                                                         {0x28, 0xFF, 0xD3, 0x74, 0xC0, 0x16, 0x04, 0x8A},
+                                                         {0x28, 0x95, 0x1B, 0x77, 0x91, 0x04, 0x02, 0x62}};
 
 #define LED_PIN 2 // Should put an led. built-in interferes with serial
-// #define TIME_BETWEEN_MEASUREMENTS 10 * 1000 // in milliseconds
-#define TIME_BETWEEN_MEASUREMENTS 10 * 60 * 1000    // in milliseconds
-#define TIME_BETWEEN_VALVE_MOVEMENTS 60 * 60 * 1000 // in milliseconds
-#define MAX_POINTS_ON_GRAPH 216                     // 10 minutes per point, 216 points, total of 36 hrs
-// #define MAX_VALVES_ON_GRAPH ((TIME_BETWEEN_MEASUREMENTS / TIME_BETWEEN_VALVE_MOVEMENTS) * MAX_POINTS_ON_GRAPH)
-#define MAX_VALVES_ON_GRAPH 36
+// #define TIME_BETWEEN_MEASUREMENTS_CLOSED 10 * 1000 // in milliseconds
+#define TIME_BETWEEN_MEASUREMENTS_CLOSED 10 * 60 * 1000 // in milliseconds, when valve is closed
+#define TIME_BETWEEN_MEASUREMENTS_OPEN 5 * 60 * 1000    // in milliseconds, when valve is open
+#define TIME_BETWEEN_VALVE_MOVEMENTS 19 * 60 * 1000     // in milliseconds
+#define MAX_POINTS_ON_GRAPH 300
+// #define MAX_VALVES_ON_GRAPH ((TIME_BETWEEN_MEASUREMENTS_CLOSED / TIME_BETWEEN_VALVE_MOVEMENTS) * MAX_POINTS_ON_GRAPH)
+#define MAX_VALVES_ON_GRAPH 50
 
 #define MAX_TEMP_MEASUREMENTS 10
-#define DELAY_BETWEEN_MEASUREMENTS 100 // in milliseconds
-#define MIN_TEMPERATURE -10
+#define DELAY_BETWEEN_MEASUREMENTS 200 // in milliseconds
+#define MIN_TEMPERATURE -5
 
 #define TIMESTAMP_SIZE 4
 #define TEMP_SIZE 1
@@ -35,6 +36,7 @@ const DeviceAddress sensorAdresses[NUMBER_OF_SENSORS] = {{0x28, 0x23, 0xD0, 0x77
 #define VALVE_OPEN_FILE "valveopen.bin"
 #define VALVE_CLOSE_FILE "valveclose.bin"
 #define DST_FILE "dst"
+#define CUTOFF_FILE "cutoff.bin"
 
 #define IP 10, 100, 102, 50
 #define GATEWAY 10, 100, 102, 1
