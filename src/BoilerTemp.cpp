@@ -47,6 +47,10 @@ byte tempQuality[NUMBER_OF_SENSORS];
 int lastGoodTemps = 0;
 byte lowerTempCutoff;
 
+#define TEMP_GLOBAL lastTemps[0]
+#define TEMP_INSIDE lastTemps[1]
+#define TEMP_TOP lastTemps[2]
+
 String points = "";
 String bytesToString_out = "";
 byte* history;
@@ -417,7 +421,8 @@ void controlValve() {
     memcpy(line, now, TIMESTAMP_SIZE);
 
     if (valveIsOpen) {
-        if ((lastTemps[2] > lastTemps[0]) || (lastTemps[0] < lowerTempCutoff)) {
+        if ((TEMP_TOP > TEMP_GLOBAL) || (TEMP_INSIDE > TEMP_GLOBAL) || (TEMP_INSIDE > TEMP_TOP) ||
+            (TEMP_GLOBAL < lowerTempCutoff)) {
             // Our water is hotter than in the system, or
             // Our water is lower than the cutoff.
             // Should close.
@@ -430,7 +435,7 @@ void controlValve() {
             timeBetweenMeasurements = TIME_BETWEEN_MEASUREMENTS_CLOSED;
         }
     } else { // closed
-        if (lastTemps[0] > lastTemps[2] + 1) {
+        if (TEMP_GLOBAL > TEMP_TOP + 1) {
             // Water in the system is hotter than ours.
             // Should open.
             valveIsOpen = true;
@@ -438,7 +443,7 @@ void controlValve() {
             positionOpen += TIMESTAMP_SIZE;
             positionOpen %= MAX_VALVE_BYTES_TO_READ;
             openValve();
-            setTempCutoff(lastTemps[2]);
+            setTempCutoff(TEMP_TOP + 1);
             lastTimeValveMoved = millis();
             timeBetweenMeasurements = TIME_BETWEEN_MEASUREMENTS_OPEN;
         }
@@ -469,8 +474,8 @@ void updateTemps() {
         }
     }
 
-    if (valveIsOpen && (lastTemps[2] - 10 > lowerTempCutoff)) {
-        setTempCutoff(lastTemps[2] - 10);
+    if (valveIsOpen && (TEMP_TOP - 8 > lowerTempCutoff)) {
+        setTempCutoff(TEMP_TOP - 8);
     }
 
     lastTimeMeasured = millis();
@@ -697,7 +702,16 @@ void prepValveMovements(const char* fileName, int pos, String& valveMovements) {
 
     int pointCount = 0;
     int lastPosition = (pos / TIMESTAMP_SIZE - 1 + MAX_VALVE_BYTES_TO_READ) % MAX_VALVES_ON_GRAPH;
-    uint32_t earliestMeasurement = parseTime(history + positionTemp);
+
+    uint32_t earliestMeasurement = UINT32_MAX;
+    for (int i = 0; i < MAX_POINTS_ON_GRAPH; i++) {
+        uint32_t measurement = parseTime(history + ((positionTemp + i * TOTAL_LOG_LINE_SIZE) % MAX_TEMP_BYTES_TO_READ));
+        if (measurement == 0) {
+            continue;
+        }
+        earliestMeasurement = measurement < earliestMeasurement ? measurement : earliestMeasurement;
+    }
+
     for (int pointIndex = pos / TIMESTAMP_SIZE;; pointIndex++) {
         // Serial.printf("pointIndex: %d\n", pointIndex);
         pointIndex %= MAX_VALVES_ON_GRAPH;
