@@ -2,7 +2,7 @@
 Solar water heating switching system.
 
 ## Background
-Some residential buildings have a central solar water heating system. Water (hereafter: shared water) is heated in solar panels on the roof, and than pushed through the boiler in each apartment. Note that this shared water is not mixed with the private water in each boiler; but just passes through a heat exchanger. Heat than transfers from the hotter water to the colder water.
+Some residential buildings have a central solar water heating system. Water (hereafter: shared water) is heated in solar panels on the roof, and than pushed through the boiler in each apartment. Note that this shared water is not mixed with the private water in each boiler; but just passes through a heat exchanger. Heat then transfers from the hotter water to the colder water.
 
 Residents may decide to opt out of the system by closing a valve near the boiler.
 
