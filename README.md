@@ -37,3 +37,6 @@ The valve should close if any of these conditions is met:
 
 The valve should open if this condition is met:
 * Temp 1 > (Temp 2) + 1
+
+## Examples
+You can find an example in the `Examples` folder. This is an html file with real-life data from my home.
