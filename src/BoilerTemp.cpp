@@ -1,7 +1,6 @@
 #include <Arduino.h>
 
 #include <DallasTemperature.h>
-#include <Stepper.h>
 
 #include <ESP8266WiFi.h>
 #include <FS.h>
@@ -13,6 +12,7 @@
 #include "Configuration.h"
 #include "dst.h"
 #include "index.h"
+#include "scripts.h"
 
 int ledStatus = LOW;
 
@@ -24,7 +24,7 @@ const char* const cutoffFileName = CUTOFF_FILE;
 
 unsigned long timeBetweenMeasurements = TIME_BETWEEN_MEASUREMENTS_OPEN;
 unsigned long lastTimeMeasured = millis() - timeBetweenMeasurements;
-unsigned long lastTimeValveMoved = millis() - TIME_BETWEEN_VALVE_MOVEMENTS + 10 * 60 * 1000;
+unsigned long lastTimeValveMoved = millis() - TIME_BETWEEN_VALVE_MOVEMENTS + VALVE_CONTROL_STARTUP_DELAY;
 
 // Valve status. Open means water can flow.
 bool valveIsOpen = true;
@@ -39,8 +39,6 @@ DallasTemperature sensors(&oneWire);
 int dst = 0;
 
 WiFiServer server(80);
-
-String lastHTMLBody = "Yo!";
 
 byte lastTemps[NUMBER_OF_SENSORS];
 byte tempQuality[NUMBER_OF_SENSORS];
@@ -72,7 +70,7 @@ void rename(String from, String to);
 float getTemp(const DeviceAddress sensorAddress);
 void toggleLED(bool on);
 void toggleLED();
-void handleRequest(String request);
+bool handleRequest(String request, WiFiClient client);
 const String getTime(time_t);
 void logTemps();
 uint32_t parseTime(const byte* bytes);
@@ -94,9 +92,6 @@ void setDST() {
     }
     bool newDST = dstByte[0] & 1;
     bool isDiff = (dst != newDST);
-    if (newDST < 0) { // dst is ambiguous
-        return;
-    }
     dst = newDST;
     if (isDiff) {
         appendFileAtPosition(dstFileName, dstByte, 1, 0);
@@ -435,7 +430,7 @@ void controlValve() {
             timeBetweenMeasurements = TIME_BETWEEN_MEASUREMENTS_CLOSED;
         }
     } else { // closed
-        if (TEMP_GLOBAL > TEMP_TOP + 1) {
+        if (TEMP_GLOBAL >= TEMP_TOP + TEMP_MARGIN_BEFORE_OPENING) {
             // Water in the system is hotter than ours.
             // Should open.
             valveIsOpen = true;
@@ -443,7 +438,7 @@ void controlValve() {
             positionOpen += TIMESTAMP_SIZE;
             positionOpen %= MAX_VALVE_BYTES_TO_READ;
             openValve();
-            setTempCutoff(TEMP_TOP + 1);
+            setTempCutoff(TEMP_GLOBAL);
             lastTimeValveMoved = millis();
             timeBetweenMeasurements = TIME_BETWEEN_MEASUREMENTS_OPEN;
         }
@@ -468,14 +463,14 @@ void updateTemps() {
             if (lastTemps[i] == BAD_TEMP) {
                 Serial.println("Last measurements were bad, will not record.");
                 temperatureError = true;
-                lastTimeMeasured = millis() - timeBetweenMeasurements + 60 * 1000; // wait a minute before retrying
+                lastTimeMeasured = millis() - timeBetweenMeasurements + TIME_BETWEEN_RETRIES; // wait before retrying
                 return;
             }
         }
     }
 
-    if (valveIsOpen && (TEMP_TOP - 8 > lowerTempCutoff)) {
-        setTempCutoff(TEMP_TOP - 8);
+    if (valveIsOpen && (TEMP_TOP - LOWER_TEMP_CUTOFF_HYSTERESIS > lowerTempCutoff)) {
+        setTempCutoff(TEMP_TOP - LOWER_TEMP_CUTOFF_HYSTERESIS);
     }
 
     lastTimeMeasured = millis();
@@ -528,18 +523,26 @@ void forceUpdate() {
     logTemps();
 }
 
-void handleRequest(String request) {
+/**
+ * @brief Serves a page.
+ *
+ * @param request The request String.
+ * @param client Client to answer to.
+ * @return true if a page was served.
+ * @return false if a page was not served (and thus we need to serve it after calling this function).
+ */
+bool handleRequest(String request, WiFiClient client) {
     if (request.indexOf("/led=off") != -1) {
         toggleLED(false);
-        return;
+        return false;
     }
     if (request.indexOf("/led=on") != -1) {
         toggleLED(true);
-        return;
+        return false;
     }
     if (request.indexOf("/led") != -1) {
         toggleLED();
-        return;
+        return false;
     }
     if (request.indexOf("/getaddress") != -1) {
         DeviceAddress Thermometer;
@@ -562,25 +565,25 @@ void handleRequest(String request) {
             printAddress(Thermometer);
         }
         Serial.println("===");
-        return;
+        return false;
     }
 
     if (request.indexOf("/listfiles") != -1) {
         Serial.println("Listing files on SD card!");
         listDir("/");
-        return;
+        return false;
     }
 
     if (request.indexOf("/force") != -1) {
         Serial.println("Forcing Full Update!");
         forceUpdate();
-        return;
+        return false;
     }
 
     if (request.indexOf("/format") != -1) {
         formatLittleFS();
         forceUpdate();
-        return;
+        return false;
     }
 
     if (request.indexOf("/debugon") != -1) {
@@ -588,7 +591,7 @@ void handleRequest(String request) {
         debug = true;
         Serial.printf("now it is %s.\n", debug ? "on" : "off");
         forceUpdate();
-        return;
+        return false;
     }
 
     if (request.indexOf("/debugoff") != -1) {
@@ -596,7 +599,7 @@ void handleRequest(String request) {
         debug = false;
         Serial.printf("now it is %s.\n", debug ? "on" : "off");
         forceUpdate();
-        return;
+        return false;
     }
 
     if (request.indexOf("/delete") != -1) {
@@ -608,19 +611,19 @@ void handleRequest(String request) {
         appendFileAtPosition(logFileName, line, TOTAL_LOG_LINE_SIZE, positionTemp);
         free(line);
         historyIsUpdated = false;
-        return;
+        return false;
     }
 
     if (request.indexOf("/openvalve") != -1) {
         Serial.print("Opening valve.\n");
         openValve();
-        return;
+        return false;
     }
 
     if (request.indexOf("/closevalve") != -1) {
         Serial.print("Closing valve.\n");
         closeValve();
-        return;
+        return false;
     }
 
     if (request.indexOf("/dst") != -1) {
@@ -630,8 +633,18 @@ void handleRequest(String request) {
         appendFileAtPosition(dstFileName, dstByte, 1, 0);
         free(dstByte);
         setDST();
-        return;
+        return false;
     }
+
+    if (request.indexOf("/scripts.js") != -1) {
+        Serial.print("Providing js file.\n");
+        client.print("HTTP/1.1 200 OK\nContent-Type: text/javascript\n");
+        client.print("\n");
+        client.print(scripts_compressed_js);
+        return true;
+    }
+
+    return false;
 }
 
 const String getTime(time_t timestamp) {
@@ -745,7 +758,9 @@ void prepValveMovements(const char* fileName, int pos, String& valveMovements) {
 
 void sendHTML(WiFiClient client) {
     Serial.println("Sending HTML!");
-    client.print("HTTP/1.1 200 OK\nContent-Type: text/html\n\n");
+    // Headers
+    client.print("HTTP/1.1 200 OK\nContent-Type: text/html\n");
+    client.print("\n");
 
     client.print("<html><script>");
 
@@ -755,60 +770,81 @@ void sendHTML(WiFiClient client) {
     client.print("\";\n");
 
     prepValveMovements(valveOpenFileName, positionOpen, valveOpenings);
-    client.print("const _VALVEOPENINGS_ = [");
+    client.print("const _VALVEOPENINGS_=[");
     client.print(valveOpenings);
     client.print("];\n");
 
     prepValveMovements(valveCloseFileName, positionClose, valveClosings);
-    client.print("const _VALVECLOSINGS_ = [");
+    client.print("const _VALVECLOSINGS_=[");
     client.print(valveClosings);
     client.print("];\n");
 
-    client.print("const TIMESTAMP_SIZE = ");
+    client.print("const TIMESTAMP_SIZE=");
     client.print(TIMESTAMP_SIZE);
     client.print(";\n");
-    client.print("const SENSOR_COUNT = ");
+    client.print("const SENSOR_COUNT=");
     client.print(NUMBER_OF_SENSORS);
+    client.print(";\n");
+
+    for (int i = 0; i < NUMBER_OF_SENSORS; i++) {
+        String tempString = "_TEMP";
+        tempString.reserve(9);
+        tempString.concat(i + 1);
+        tempString.concat("_");
+        client.print("const ");
+        client.print(tempString);
+        client.print("=");
+
+        client.print(lastTemps[i] != BAD_TEMP ? String(lastTemps[i]) : "\"BAD\"");
+        client.print(";\n");
+
+        tempString = "_TEMP";
+        tempString.concat(i + 1);
+        tempString.concat("Q_");
+        client.print("const ");
+        client.print(tempString);
+        client.print("=");
+        client.print(String(tempQuality[i]));
+        client.print(";\n");
+    }
+
+    uint32_t valveLastOpened, valveLastClosed;
+    valveLastOpened = getValveLast(VALVE_OPEN);
+    valveLastClosed = getValveLast(VALVE_CLOSE);
+    client.print("const _VALVEOPENED_=\"");
+    client.print(getTime(valveLastOpened));
+    client.print("\";\n");
+    client.print("const _VALVECLOSED_=\"");
+    client.print(getTime(valveLastClosed));
+    client.print("\";\n");
+    client.print("const _VALVESTATUS_=");
+    client.print(valveIsOpen ? "\"Open\"" : "\"Closed\"");
+    client.print(";\n");
+
+    client.print("const _IP_=\"");
+    client.print(WiFi.localIP().toString());
+    client.print("\";\n");
+    client.print("const _DST_=\"");
+    client.print(dst == 1 ? "On" : "Off");
+    client.print("\";\n");
+    client.print("const _TIME_=\"");
+    client.print(lastMeasurementTimestamp);
+    client.print("\";\n");
+
+    client.print("const _INFO_=");
+    client.print("\"Some info will be here\"");
     client.print(";\n");
 
     client.print("</script>");
 
     // refresh to the homepage
     client.print(R"===(<meta http-equiv="refresh" content=")===");
-    client.print((timeBetweenMeasurements - (millis() - lastTimeMeasured)) / 1000 + 30);
+    client.print((TIME_BETWEEN_HTML_REFRESHES - (millis() - lastTimeMeasured)) / 1000);
     client.print(R"===(; URL=http://)===");
     client.print(WiFi.localIP().toString());
     client.print(R"===(/" />)===");
 
-    lastHTMLBody = String(compressed_html);
-    lastHTMLBody.replace("_IP_", WiFi.localIP().toString());
-    lastHTMLBody.replace("_LED-STATUS_", ledStatus == HIGH ? "Off" : "On");
-    lastHTMLBody.replace("_TIME_", lastMeasurementTimestamp);
-    lastHTMLBody.replace("_DST_", dst == 1 ? "On" : "Off");
-
-    lastHTMLBody.replace("_VALVESTATUS_", valveIsOpen ? "Open" : "Closed");
-    uint32_t valveLastOpened, valveLastClosed;
-    valveLastOpened = getValveLast(VALVE_OPEN);
-    valveLastClosed = getValveLast(VALVE_CLOSE);
-    lastHTMLBody.replace("_VALVEOPENED_", getTime(valveLastOpened));
-    lastHTMLBody.replace("_VALVECLOSED_", getTime(valveLastClosed));
-
-    for (int i = 0; i < NUMBER_OF_SENSORS; i++) {
-        String toReplace = "_TEMP";
-        toReplace.reserve(9);
-        toReplace.concat(i + 1);
-        toReplace.concat("_");
-        lastHTMLBody.replace(toReplace, lastTemps[i] != BAD_TEMP ? String(lastTemps[i]) : "BAD");
-
-        toReplace = "_TEMP";
-        toReplace.concat(i + 1);
-        toReplace.concat("Q_");
-        lastHTMLBody.replace(toReplace, String(tempQuality[0]));
-    }
-
-    lastHTMLBody.replace("_TEMPCUTOFF_", String(lowerTempCutoff));
-
-    client.print(lastHTMLBody);
+    client.print(compressed_html);
     client.print("</html>");
 
     client.flush();
@@ -824,7 +860,7 @@ void logTemps() {
     setDST();
     time_t* now = (time_t*)calloc(sizeof(time_t), 1);
     *now = time(nullptr);
-    Serial.printf("Time: %ld\n", *now);
+    Serial.printf("Time: %lld\n", *now);
     byte* line = (byte*)malloc(TOTAL_LOG_LINE_SIZE);
     memcpy(line, now, TIMESTAMP_SIZE);
     for (int i = 0; i < NUMBER_OF_SENSORS; i++) {
@@ -951,8 +987,9 @@ void loop() {
     String request = client.readStringUntil('\r');
     Serial.println(request);
 
-    handleRequest(request);
-    sendHTML(client);
+    if (!handleRequest(request, client)) {
+        sendHTML(client);
+    }
 
     delay(100);
     Serial.println("~~ Client disonnected");

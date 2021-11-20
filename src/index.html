@@ -1,190 +1,75 @@
-<script>
-    const LINE_SIZE = TIMESTAMP_SIZE + SENSOR_COUNT;
-    function hexStringToByte(str) {
-        if (!str) {
-            return new Uint8Array();
-        }
+<link href="https://fonts.googleapis.com/css?family=Montserrat|Ubuntu" rel="stylesheet" />
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet"
+    integrity="sha384-EVSTQN3/azprG1Anm3QDgpJLIm9Nao0Yz1ztcQTwFspd3yD65VohhpuuCOmLASjC" crossorigin="anonymous" />
+<link rel="icon"
+    href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAS0lEQVR42s2SMQ4AIAjE+P+ncSYdasgNXMJgcyIIlVKPIKdvioAXyWBeJmVpqRZKWtj9QWAKZyWll50b8IcL9JUeQF50n28ckyb0ADG8RLwp05YBAAAAAElFTkSuQmCC"
+    type="image/x-png" />
 
-        var a = [];
-        for (var i = 0, len = str.length; i < len; i += 2) {
-            a.push(parseInt(str.substr(i, 2), 16));
-        }
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.6.0/chart.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.1/moment.min.js"></script>
+<script
+    src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-adapter-moment/1.0.0/chartjs-adapter-moment.min.js"></script>
+<script
+    src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-annotation/1.1.0/chartjs-plugin-annotation.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/hammer.js/2.0.8/hammer.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-zoom/1.2.0/chartjs-plugin-zoom.min.js"></script>
+<script src="scripts.js"></script>
 
-        return new Uint8Array(a);
-    }
 
-    const historyBytes = hexStringToByte(_HISTORY_);
-    const POINTS_COUNT = historyBytes.length / LINE_SIZE;
-
-    function parseTime(line_start) {
-        let time = 0;
-        for (let i = 0, mult = 1; i < TIMESTAMP_SIZE; i++, mult *= 256) {
-            time += historyBytes[line_start + i] * mult;
-        }
-        return time;
-    }
-
-    function parseTemps(line_start) {
-        let temps = [];
-        for (let i = 0; i < SENSOR_COUNT; i++) {
-            temps.push(historyBytes[line_start + TIMESTAMP_SIZE + i]);
-        }
-        return temps;
-    }
-
-    let historyClean = [];
-    for (let i = 0; i < POINTS_COUNT; i++) {
-        const line_start = i * LINE_SIZE;
-        const time = parseTime(line_start);
-        const temps = parseTemps(line_start);
-        if (time == 0) {
-            continue;
-        }
-        let bad = false;
-        for (let j = 0; j < temps.length; j++) {
-            if (temps[j] == 157) {
-                bad = true;
-                break;
-            }
-        }
-        if (bad) {
-            continue;
-        }
-        let point = { time: time * 1000, temps: temps };
-        historyClean.push(point);
-    }
-
-    function comparePoints(a, b) {
-        if (a.time < b.time) {
-            return -1;
-        }
-        return a.time > b.time ? 1 : 0;
-    }
-
-    historyClean.sort(comparePoints);
-
-    var GLOBAL_DATA = [];
-    var INSIDE_DATA = [];
-    var TOP_DATA = [];
-
-    for (let i = 0; i < historyClean.length; i++) {
-        GLOBAL_DATA.push({ x: historyClean[i].time, y: historyClean[i].temps[0] });
-        INSIDE_DATA.push({ x: historyClean[i].time, y: historyClean[i].temps[1] });
-        TOP_DATA.push({ x: historyClean[i].time, y: historyClean[i].temps[2] });
-    }
-
-    const annotationsOpen = _VALVEOPENINGS_.map(function (timestamp, index) {
-        return {
-            type: "line",
-            mode: "vertical",
-            scaleID: "x-axis-0",
-            value: timestamp,
-            borderColor: "red",
-            label: {
-                content: "Opened",
-                enabled: true,
-                position: "top"
-            }
-        }
-    });
-
-    const annotationsClose = _VALVECLOSINGS_.map(function (timestamp, index) {
-        return {
-            type: "line",
-            mode: "vertical",
-            scaleID: "x-axis-0",
-            value: timestamp,
-            borderColor: "blue",
-            label: {
-                content: "Closed",
-                enabled: true,
-                position: "top"
-            }
-        }
-    });
-
-    const annotations = annotationsOpen.concat(annotationsClose);
-</script>
-
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.9.4/Chart.bundle.min.js"
-    integrity="sha512-SuxO9djzjML6b9w9/I07IWnLnQhgyYVSpHZx0JV97kGBfTIsUYlWflyuW4ypnvhBrslz1yJ3R+S14fdCWmSmSA=="
-    crossorigin="anonymous"></script>
-
-<script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-annotation/0.5.7/chartjs-plugin-annotation.min.js"
-    integrity="sha256-Olnajf3o9kfkFGloISwP1TslJiWUDd7IYmfC+GdCKd4=" crossorigin="anonymous"></script>
-
-<link rel='icon'
-    href='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAS0lEQVR42s2SMQ4AIAjE+P+ncSYdasgNXMJgcyIIlVKPIKdvioAXyWBeJmVpqRZKWtj9QWAKZyWll50b8IcL9JUeQF50n28ckyb0ADG8RLwp05YBAAAAAElFTkSuQmCC'
-    type='image/x-png' />
-
-<body>
-    <p>
-        IP: _IP_<br />
-        Led is: _LED-STATUS_<br />
-        Time: _TIME_<br />
-        DST: _DST_<br />
-        <br />
-        Valve is: _VALVESTATUS_<br />
-        Last Opened: _VALVEOPENED_<br />
-        Last Closed: _VALVECLOSED_<br />
-        <br />
-        <span style="color: red;">Temperature 1 (Global): _TEMP1_ &deg;C, Quality: _TEMP1Q_%</span><br />
-        <span style="color: orange;">Temperature 2 (Inside): _TEMP2_ &deg;C, Quality: _TEMP2Q_%</span><br />
-        <span style="color: purple;">Temperature 3 (Top): _TEMP3_ &deg;C, Quality: _TEMP3Q_%</span><br />
-        <br />
-        Valve will close when below: _TEMPCUTOFF_&deg;C<br />
-    </p>
-
-    <div id="chart">
-        <canvas id="temperatures" height="500"></canvas>
-        <script>
-            var ctx_temps = document.getElementById('temperatures').getContext('2d');
-            var scatterChart1 = new Chart(ctx_temps, {
-                type: 'line',
-                data: {
-                    datasets: [{
-                        label: 'Global',
-                        data: GLOBAL_DATA,
-                        borderColor: "red",
-                        fill: false
-                    }, {
-                        label: 'Inside',
-                        data: INSIDE_DATA,
-                        borderColor: "orange",
-                        fill: false
-                    }, {
-                        label: 'Top',
-                        data: TOP_DATA,
-                        borderColor: "purple",
-                        fill: false
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    scales: {
-                        xAxes: [{
-                            type: 'time',
-                            display: true,
-                            scaleLabel: {
-                                display: true,
-                                labelString: 'Date'
-                            },
-                            time: {
-                                displayFormats: {
-                                    minute: 'HH:mm'
-                                }
-                            }
-                        }],
-                        yAxes: [{
-                            position: 'right'
-                        }]
-                    },
-                    annotation: {
-                        annotations: annotations
-                    }
-                }
-            });
-        </script>
+<body style="margin-top: 20px;">
+    <div class="container">
+        <div class='row justify-content-md-center'>
+            <div class='col col-lg-4'>
+                <div class="card text-center">
+                    <div class="card-header">
+                        <strong>System Information</strong>
+                    </div>
+                    <div class="card-body" style='height: 7rem;'>
+                        IP: <span id="_IP_"></span><br />
+                        DST: <span id="_DST_"></span><br />
+                    </div>
+                    <div class="card-footer text-muted">
+                        Time: <span id="_TIME_"></span>
+                    </div>
+                </div>
+            </div>
+            <div class='col col-lg-4'>
+                <div class="card text-center">
+                    <div class="card-header">
+                        <strong>Valve Information</strong>
+                    </div>
+                    <div class="card-body" style='height: 7rem;'>
+                        <p class="card-text">
+                            Last Opened: <span id="_VALVEOPENED_"></span><br />
+                            Last Closed: <span id="_VALVECLOSED_"></span><br />
+                    </div>
+                    <div class="card-footer text-muted">
+                        Valve is: <span id="_VALVESTATUS_"></span>
+                    </div>
+                </div>
+            </div>
+            <div class='col col-lg-4'>
+                <div class="card text-center">
+                    <div class="card-header">
+                        <strong>Temperature Information</strong>
+                    </div>
+                    <div class="card-body" style='height: 7rem;'>
+                        <span style="color: red">1 (Global): <span id="_TEMP1_"></span> &deg;C, Quality:
+                            <span id="_TEMP1Q_"></span>%</span><br />
+                        <span style="color: orange">2 (Inside): <span id="_TEMP2_"></span> &deg;C, Quality:
+                            <span id="_TEMP2Q_"></span>%</span><br />
+                        <span style="color: purple">3 (Top): <span id="_TEMP3_"></span> &deg;C, Quality:
+                            <span id="_TEMP3Q_"></span>%</span><br />
+                    </div>
+                    <div class="card-footer text-muted">
+                        <span id="_INFO_">PLACEHOLDER</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div id="chart" class='container' style='padding-top: 50px;'>
+        <canvas id="temperatures" height="550"></canvas>
     </div>
 </body>
