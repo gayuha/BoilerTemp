@@ -293,6 +293,10 @@ void readFile(const char* path) {
 byte* readFileToByteArray(const char* path, int length) {
     Serial.printf("Reading file: %s... ", path);
     byte* out = (byte*)calloc(length, sizeof(byte));
+    if (out == nullptr) {
+        Serial.println("Failed to allocate memory.");
+        return nullptr;
+    }
 
     File file = LittleFS.open(path, "r");
     if (!file) {
@@ -400,7 +404,7 @@ void closeValve() {
 }
 
 void controlValve() {
-    if (millis() - lastTimeValveMoved < TIME_BETWEEN_VALVE_MOVEMENTS) {
+    if (millis() < TIME_BETWEEN_VALVE_MOVEMENTS + lastTimeValveMoved) {
         return;
     }
 
@@ -449,7 +453,7 @@ void controlValve() {
 }
 
 void updateTemps() {
-    if (millis() - lastTimeMeasured < timeBetweenMeasurements) {
+    if (millis() < timeBetweenMeasurements + lastTimeMeasured) {
         return;
     }
 
@@ -464,6 +468,7 @@ void updateTemps() {
                 Serial.println("Last measurements were bad, will not record.");
                 temperatureError = true;
                 lastTimeMeasured = millis() - timeBetweenMeasurements + TIME_BETWEEN_RETRIES; // wait before retrying
+                lastTimeValveMoved = millis() - TIME_BETWEEN_VALVE_MOVEMENTS + VALVE_CONTROL_STARTUP_DELAY;
                 return;
             }
         }
@@ -490,13 +495,7 @@ void toggleLED(bool on) {
 }
 
 void toggleLED() {
-    if (ledStatus == HIGH) {
-        digitalWrite(LED_PIN, LOW);
-        ledStatus = LOW;
-    } else {
-        digitalWrite(LED_PIN, HIGH);
-        ledStatus = HIGH;
-    }
+    toggleLED(ledStatus == HIGH);
 }
 
 void printAddress(DeviceAddress deviceAddress) {
@@ -668,12 +667,13 @@ uint32_t parseTime(const byte* bytes) {
     return time;
 }
 
-String byteToHex(const byte* bytes, int length) {
-    if (bytes == nullptr) {
-        return "";
+void historyByteToHex() {
+    Serial.printf("Generating history hex bytes... ");
+    if (history == nullptr) {
+        Serial.printf("History is nullptr.\n");
+        return;
     }
-    String result;
-    result.reserve(2 * length);
+    historyHex = "";
     for (int i = 0; i < MAX_TEMP_BYTES_TO_READ; i++) {
         char msb = (char)((history[i] & 0b11110000) >> 4);
         char lsb = (char)(history[i] & 0b00001111);
@@ -687,10 +687,10 @@ String byteToHex(const byte* bytes, int length) {
         } else {
             lsb += 'A' - 10;
         }
-        result += msb;
-        result += lsb;
+        historyHex += msb;
+        historyHex += lsb;
     }
-    return result;
+    Serial.printf("Finished generating history hex bytes!\n");
 }
 
 void updateHistory() {
@@ -699,7 +699,7 @@ void updateHistory() {
         free(history);
         history = readFileToByteArray(logFileName, MAX_TEMP_BYTES_TO_READ);
         historyIsUpdated = true;
-        historyHex = byteToHex(history, MAX_TEMP_BYTES_TO_READ);
+        historyByteToHex();
     } else {
         Serial.print("History is okay, not updating.\n");
     }
@@ -930,7 +930,7 @@ void setup() {
     }
     Serial.println("LittleFS Mounted!");
 
-    Serial.print("\nStarting time configuration!");
+    Serial.print("\nStarting time configuration!\n");
     configureTime();
     delay(500);
     Serial.print("\nWaiting for time...");
@@ -943,6 +943,14 @@ void setup() {
     Serial.println(getTime(time(nullptr)));
 
     delay(200);
+
+    historyHex = "";
+    if (historyHex.reserve(2 * MAX_TEMP_BYTES_TO_READ)) {
+        Serial.printf("Successfully reserved memory for history hex.");
+    } else {
+        Serial.printf("Failed to reserve memory for history hex. Restarting...");
+        ESP.restart();
+    }
 
     positionTemp = getTempPosition();
     Serial.printf("positionTemp is: %d\n", positionTemp);
@@ -979,7 +987,7 @@ void loop() {
     unsigned long available = millis();
     while (!client.available()) {
         delay(10);
-        if (millis() - available > 1500) {
+        if (millis() > 1500 + available) {
             Serial.println("~~ failed to connect.\n");
             return;
         }
