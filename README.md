@@ -8,7 +8,7 @@ Residents may decide to opt out of the system by closing a valve near the boiler
 
 ## Motivation
 Ideally, heat will pass from the shared water to the private water of each boiler, and not the other way around. Unfortunately, there is no mechanism in place to ensure that. When the sun no longer heats the solar panels, the shared water will cool, yet the private waters will still be hot from being heated during the day. Forcing the shared water through the boilers will effectively cool them.
-In addition, a resident may heat the water electrically. Nothing prevents the shared water from stealing the heat from the electrically heated water. This effectively reduces the effectivenes of the electrical heater, increasing electrical bills and reducing user satisfaction.
+In addition, a resident may heat the water electrically. Nothing prevents the shared water from stealing the heat from the electrically heated water. This reduces the effectiveness of the electrical heater, increasing electrical bills and reducing user satisfaction.
 
 ## The Solution
 This project consists of:
