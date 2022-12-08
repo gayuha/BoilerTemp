@@ -41,9 +41,12 @@ int dst = 0;
 WiFiServer server(80);
 
 byte lastTemps[NUMBER_OF_SENSORS];
+byte lastLastTemps[NUMBER_OF_SENSORS];
 byte tempQuality[NUMBER_OF_SENSORS];
 int lastGoodTemps = 0;
 byte lowerTempCutoff;
+time_t* lastTempsTime;
+bool droppedTemps = false;
 
 #define TEMP_GLOBAL lastTemps[0]
 #define TEMP_INSIDE lastTemps[1]
@@ -420,10 +423,12 @@ void controlValve() {
     memcpy(line, now, TIMESTAMP_SIZE);
 
     if (valveIsOpen) {
-        if ((TEMP_TOP > TEMP_GLOBAL) || (TEMP_INSIDE > TEMP_GLOBAL) || (TEMP_INSIDE > TEMP_TOP) ||
-            (TEMP_GLOBAL < lowerTempCutoff)) {
+        if ((TEMP_TOP >= TEMP_GLOBAL + TEMP_MARGIN_BEFORE_CLOSING) ||
+            (TEMP_INSIDE > TEMP_GLOBAL + TEMP_MARGIN_BEFORE_CLOSING) || (TEMP_GLOBAL < lowerTempCutoff) ||
+            (TEMP_GLOBAL < MIN_OPEN_TEMP)) {
             // Our water is hotter than in the system, or
-            // Our water is lower than the cutoff.
+            // Our water is lower than the cutoff, or
+            // Global water is too cold.
             // Should close.
             appendFileAtPosition(valveCloseFileName, line, TIMESTAMP_SIZE, positionClose);
             positionClose += TIMESTAMP_SIZE;
@@ -434,7 +439,7 @@ void controlValve() {
             timeBetweenMeasurements = TIME_BETWEEN_MEASUREMENTS_CLOSED;
         }
     } else { // closed
-        if (TEMP_GLOBAL >= TEMP_TOP + TEMP_MARGIN_BEFORE_OPENING) {
+        if ((TEMP_GLOBAL >= TEMP_TOP + TEMP_MARGIN_BEFORE_OPENING) && (TEMP_GLOBAL >= MIN_OPEN_TEMP)) {
             // Water in the system is hotter than ours.
             // Should open.
             valveIsOpen = true;
@@ -442,7 +447,7 @@ void controlValve() {
             positionOpen += TIMESTAMP_SIZE;
             positionOpen %= MAX_VALVE_BYTES_TO_READ;
             openValve();
-            setTempCutoff(TEMP_GLOBAL);
+            setTempCutoff(TEMP_TOP);
             lastTimeValveMoved = millis();
             timeBetweenMeasurements = TIME_BETWEEN_MEASUREMENTS_OPEN;
         }
@@ -580,6 +585,7 @@ bool handleRequest(String request, WiFiClient client) {
     }
 
     if (request.indexOf("/format") != -1) {
+        Serial.println("Formatting LittleFS and forcing Full Update!");
         formatLittleFS();
         forceUpdate();
         return false;
@@ -854,14 +860,46 @@ void logTemps() {
     if (tempsAreLogged) {
         return;
     }
+    tempsAreLogged = true;
 
     Serial.println("Logging Temps!");
+
+    bool tempsWereUpdated = false;
+    for (int i = 0; i < NUMBER_OF_SENSORS; i++) {
+        if (lastLastTemps[i] != lastTemps[i]) {
+            tempsWereUpdated = true;
+            break;
+        }
+    }
+
+    if (!tempsWereUpdated) {
+        Serial.println("Temps were not updated, will not log.");
+        droppedTemps = true;
+        *lastTempsTime = time(nullptr);
+        return;
+    }
+
     temperatureError = false;
     setDST();
     time_t* now = (time_t*)calloc(sizeof(time_t), 1);
-    *now = time(nullptr);
-    Serial.printf("Time: %lld\n", *now);
     byte* line = (byte*)malloc(TOTAL_LOG_LINE_SIZE);
+
+    // update last temperature
+    if (droppedTemps) {
+        // we dropped the last measurement, so record it now
+        Serial.printf("Last temperature time: %lld\n", *lastTempsTime);
+        memcpy(line, lastTempsTime, TIMESTAMP_SIZE);
+        for (int i = 0; i < NUMBER_OF_SENSORS; i++) {
+            line[TIMESTAMP_SIZE + TEMP_SIZE * i] = lastLastTemps[i];
+        }
+        appendFileAtPosition(logFileName, line, TOTAL_LOG_LINE_SIZE, positionTemp);
+        positionTemp += TOTAL_LOG_LINE_SIZE;
+        positionTemp %= MAX_TEMP_BYTES_TO_READ;
+    }
+
+    // update current temperature
+    *now = time(nullptr);
+    Serial.printf("Current temperature time: %lld\n", *now);
     memcpy(line, now, TIMESTAMP_SIZE);
     for (int i = 0; i < NUMBER_OF_SENSORS; i++) {
         line[TIMESTAMP_SIZE + TEMP_SIZE * i] = lastTemps[i];
@@ -869,12 +907,17 @@ void logTemps() {
     appendFileAtPosition(logFileName, line, TOTAL_LOG_LINE_SIZE, positionTemp);
     positionTemp += TOTAL_LOG_LINE_SIZE;
     positionTemp %= MAX_TEMP_BYTES_TO_READ;
+
     free(line);
     free(now);
 
+    for (int i = 0; i < NUMBER_OF_SENSORS; i++) {
+        lastLastTemps[i] = lastTemps[i];
+    }
+
+    droppedTemps = false;
     lastMeasurementTimestamp = getTime(time(nullptr));
     historyIsUpdated = false;
-    tempsAreLogged = true;
 }
 
 void setup() {
@@ -971,6 +1014,8 @@ void setup() {
 
     readTempCutoffFromFile();
     Serial.printf("Lower temperature cutoff set to: %dC\n", lowerTempCutoff);
+
+    lastTempsTime = (time_t*)calloc(sizeof(time_t), 1);
 
     Serial.println("\n~~~ Setup Finished! ~~~\n\n");
 }

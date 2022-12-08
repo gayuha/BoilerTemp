@@ -1,9 +1,9 @@
 #pragma once
 
-#define SSID "IrishAP01"
-#define WIFI_PASSWORD "0523423456ygif"
-#define SSID2 "Irisha"
-#define WIFI_PASSWORD2 "0523423456ygif"
+#define SSID "SSID"
+#define WIFI_PASSWORD "PASSWORD"
+#define SSID2 "SSID2"
+#define WIFI_PASSWORD2 "PASSWORD2"
 
 #define ONE_WIRE_BUS D4
 #define NUMBER_OF_SENSORS 3
@@ -21,12 +21,14 @@ const DeviceAddress sensorAdresses[NUMBER_OF_SENSORS] = {{0x28, 0x23, 0xD0, 0x77
 #define MAX_POINTS_ON_GRAPH 1500
 // #define MAX_VALVES_ON_GRAPH ((TIME_BETWEEN_MEASUREMENTS_CLOSED / TIME_BETWEEN_VALVE_MOVEMENTS) * MAX_POINTS_ON_GRAPH)
 #define MAX_VALVES_ON_GRAPH 50
+#define MIN_OPEN_TEMP 30 // minimum temperature, below which the valve will not open. if open below that, it will close.
 
 #define MAX_TEMP_MEASUREMENTS 5
 #define DELAY_BETWEEN_MEASUREMENTS 200 // in milliseconds
 #define MIN_TEMPERATURE -5
-#define LOWER_TEMP_CUTOFF_HYSTERESIS 10 // how far we let the temperature fall before closing the valve
-#define TEMP_MARGIN_BEFORE_OPENING 3
+#define LOWER_TEMP_CUTOFF_HYSTERESIS 12 // how far we let the temperature fall before closing the valve
+#define TEMP_MARGIN_BEFORE_OPENING 3    // how much higher the global temp needs to be above the top temp before opening
+#define TEMP_MARGIN_BEFORE_CLOSING 2 // how much hotter the top water needs to be above the global water before closing
 
 #define TIMESTAMP_SIZE 4
 #define TEMP_SIZE 1
